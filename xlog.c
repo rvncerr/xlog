@@ -1,5 +1,5 @@
 #include "xlog.h"
-#include "murmur3.h"
+#include "crc32c.h"
 
 xlog_writer_t *xlog_writer_open(const char *path) {
     xlog_writer_t *w = malloc(sizeof(xlog_writer_t));
@@ -12,7 +12,7 @@ xlog_writer_t *xlog_writer_open(const char *path) {
 void xlog_writer_commit(xlog_writer_t *w, void *buf, size_t sz) {
     xlog_header_t *h = malloc(sizeof(xlog_header_t));
     h->size = sz;
-    h->checksum = murmur3_32(buf, sz);
+    h->checksum = crc32c(0, buf, sz);
     flock(fileno(w->fd), LOCK_EX);
     fwrite(h, sizeof(xlog_header_t), 1, w->fd);
     fwrite(buf, sz, 1, w->fd);
@@ -59,7 +59,7 @@ size_t xlog_reader_next(xlog_reader_t *r, void **buf) {
 
     flock(fileno(r->fd), LOCK_UN);
 
-    if(h.checksum != murmur3_32(*buf, h.size)) {
+    if(h.checksum != crc32c(0, *buf, h.size)) {
         free(*buf);
         return 0;
     }

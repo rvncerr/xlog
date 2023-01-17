@@ -3,7 +3,7 @@ project(xlog C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_library(xlog SHARED xlog.c xlog.h murmur3.h murmur3.c)
+add_library(xlog SHARED xlog.c xlog.h crc32c.h crc32c.c)
 
 add_executable(xlog_dump xlog_dump.c hexdump.c xlog)
 target_link_libraries(xlog_dump xlog)
