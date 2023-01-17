@@ -4,6 +4,8 @@
 #include "xlog.h"
 
 static void test_xlog(void) {
+    unlink("test.xlog");
+
     xlog_writer_t *w = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
 
@@ -12,13 +14,23 @@ static void test_xlog(void) {
 
     char *buf = "Hello, world!";
     xlog_writer_commit(w, buf, strlen(buf) + 1);
+
+    char *buf2 = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
+                 "sed do eiusmod tempor incididunt ut labore et dolore magna "
+                 "aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
+                 "ullamco laboris nisi ut aliquip ex ea commodo consequat. "
+                 "Duis aute irure dolor in reprehenderit in voluptate velit "
+                 "esse cillum dolore eu fugiat nulla pariatur. Excepteur sint "
+                 "occaecat cupidatat non proident, sunt in culpa qui officia "
+                 "deserunt mollit anim id est laborum.";
+    xlog_writer_commit(w, buf2, strlen(buf2) + 1);
     xlog_writer_close(w);
 
-    char *buf2;
-    size_t sz = xlog_reader_next(r, (void **)&buf2);
+    char *buf3;
+    size_t sz = xlog_reader_next(r, (void **)&buf3);
     CU_ASSERT_EQUAL_FATAL(sz, strlen(buf) + 1);
-    CU_ASSERT_STRING_EQUAL_FATAL(buf, buf2);
-    free(buf2);
+    CU_ASSERT_STRING_EQUAL_FATAL(buf, buf3);
+    free(buf3);
 
     xlog_reader_close(r);
 }

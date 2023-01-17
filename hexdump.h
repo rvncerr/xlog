@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <ctype.h>
 
 void hexdump(void *buf, size_t sz);
 

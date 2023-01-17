@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 int main(int argc, char **argv) {
     if(argc < 2) {
@@ -19,9 +20,15 @@ int main(int argc, char **argv) {
     char *buf;
     size_t sz;
 
+    bool first = true;
     while((sz = xlog_reader_next(r, (void **)&buf)) > 0) {
+        if(!first) {
+            printf("\n");
+        }
         hexdump(buf, sz);
         free(buf);
+
+        first = false;
     }
 
     xlog_reader_close(r);
