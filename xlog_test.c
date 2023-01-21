@@ -35,34 +35,113 @@ static void test_crc32c(void) {
     CU_ASSERT_EQUAL(crc32c(0, t32_d, 32), 0x113fdb5c);
 }
 
-static void test_xlog(void) {
+static void test_xlog_basic(void) {
+    unlink("test.xlog");
+
+    char *wbuf = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
+                "sed do eiusmod tempor incididunt ut labore et dolore magna "
+                "aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
+                "ullamco laboris nisi ut aliquip ex ea commodo consequat. "
+                "Duis aute irure dolor in reprehenderit in voluptate velit "
+                "esse cillum dolore eu fugiat nulla pariatur. Excepteur sint "
+                "occaecat cupidatat non proident, sunt in culpa qui officia "
+                "deserunt mollit anim id est laborum.";
+
+    xlog_writer_t *w = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    xlog_writer_commit(w, wbuf, strlen(wbuf) + 1);
+    xlog_writer_close(w);
+
+    char *rbuf;
+    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    size_t sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, strlen(rbuf) + 1);
+    CU_ASSERT_STRING_EQUAL_FATAL(wbuf, rbuf);
+    free(rbuf);
+    xlog_reader_close(r);
+}
+
+static void test_xlog_multi(void) {
     unlink("test.xlog");
 
     xlog_writer_t *w = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    for(int i = 0; i < 1000; i++) {
+        char buf[32];
+        sprintf(buf, "Hello, world! %d", i);
+        xlog_writer_commit(w, buf, strlen(buf) + 1);
+    }
+    xlog_writer_close(w);
+
+    char *rbuf;
+    size_t sz;
 
     xlog_reader_t *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    for(int i = 0; i < 1000; i++) {
+        sz = xlog_reader_next(r, (void **)&rbuf);
+        CU_ASSERT_EQUAL_FATAL(sz, strlen(rbuf) + 1);
+        char buf[32];
+        sprintf(buf, "Hello, world! %d", i);
+        CU_ASSERT_STRING_EQUAL_FATAL(buf, rbuf);
+        free(rbuf);
+    }
 
-    char *buf = "Hello, world!";
-    xlog_writer_commit(w, buf, strlen(buf) + 1);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 0);
 
-    char *buf2 = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
-                 "sed do eiusmod tempor incididunt ut labore et dolore magna "
-                 "aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
-                 "ullamco laboris nisi ut aliquip ex ea commodo consequat. "
-                 "Duis aute irure dolor in reprehenderit in voluptate velit "
-                 "esse cillum dolore eu fugiat nulla pariatur. Excepteur sint "
-                 "occaecat cupidatat non proident, sunt in culpa qui officia "
-                 "deserunt mollit anim id est laborum.";
-    xlog_writer_commit(w, buf2, strlen(buf2) + 1);
-    xlog_writer_close(w);
+    xlog_reader_reset(r);
 
-    char *buf3;
-    size_t sz = xlog_reader_next(r, (void **)&buf3);
-    CU_ASSERT_EQUAL_FATAL(sz, strlen(buf) + 1);
-    CU_ASSERT_STRING_EQUAL_FATAL(buf, buf3);
-    free(buf3);
+    for(int i = 0; i < 1000; i++) {
+        sz = xlog_reader_next(r, (void **)&rbuf);
+        CU_ASSERT_EQUAL_FATAL(sz, strlen(rbuf) + 1);
+        char buf[32];
+        sprintf(buf, "Hello, world! %d", i);
+        CU_ASSERT_STRING_EQUAL_FATAL(buf, rbuf);
+        free(rbuf);
+    }
+
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 0);
+
+    xlog_reader_close(r);
+}
+
+static void test_xlog_2writers(void) {
+    unlink("test.xlog");
+
+    xlog_writer_t *w1 = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w1);
+    xlog_writer_t *w2 = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w2);
+
+    for(int i = 0; i < 50000; i++) {
+        char buf[32];
+        sprintf(buf, "Hello, world! %d", 2*i);
+        xlog_writer_commit(w1, buf, strlen(buf) + 1);
+        sprintf(buf, "Hello, world! %d", 2*i + 1);
+        xlog_writer_commit(w2, buf, strlen(buf) + 1);
+    }
+    xlog_writer_close(w1);
+    xlog_writer_close(w2);
+
+    char *rbuf;
+    size_t sz;
+
+    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    for(int i = 0; i < 100000; i++) {
+        sz = xlog_reader_next(r, (void **)&rbuf);
+        CU_ASSERT_EQUAL_FATAL(sz, strlen(rbuf) + 1);
+        char buf[32];
+        sprintf(buf, "Hello, world! %d", i);
+        CU_ASSERT_STRING_EQUAL_FATAL(buf, rbuf);
+        free(rbuf);
+    }
+
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 0);
 
     xlog_reader_close(r);
 }
@@ -89,7 +168,17 @@ int main(void) {
         return CU_get_error();
     }
 
-    if(NULL == CU_add_test(suite, "xlog", test_xlog)) {
+    if(NULL == CU_add_test(suite, "xlog_basic", test_xlog_basic)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_multi", test_xlog_multi)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_2writers", test_xlog_2writers)) {
         CU_cleanup_registry();
         return CU_get_error();
     }

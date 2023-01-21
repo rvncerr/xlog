@@ -20,6 +20,7 @@ void hexdump(void *buf, size_t sz) {
             printf("%02x ", ((uint8_t *)buf)[sz / 16 * 16 + j]);
         }
         for (size_t j = 0; j < 16 - sz % 16; j++) {
+            if(sz % 16 + j == 8) printf(" ");
             printf("   ");
         }
         printf("  |");
