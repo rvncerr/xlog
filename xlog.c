@@ -6,6 +6,11 @@ xlog_writer_t *xlog_writer_open(const char *path) {
     if(!w) return NULL;
 
     w->fd = fopen(path, "wb");
+    if(w->fd == NULL) {
+        free(w);
+        return NULL;
+    }
+
     return w;
 }
 
@@ -32,6 +37,10 @@ xlog_reader_t *xlog_reader_open(const char *path) {
     if(!r) return NULL;
 
     r->fd = fopen(path, "rb");
+    if(r->fd == NULL) {
+        free(r);
+        return NULL;
+    }
 
     return r;
 }
