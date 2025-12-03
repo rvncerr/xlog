@@ -1,6 +1,17 @@
 xlog
 ====
 
-xlog is a library implementing a binary append-only log. It is designed to be used in a distributed system, where multiple processes can write to the same log. It is also designed to be used in a system where the log is read by multiple processes, and where the log is read while it is being written to.
+Binary append-only log with CRC32C checksums. Supports concurrent writers/readers.
 
-See [xlog.h](xlog.h) for the API.
+## Build
+
+```bash
+conan install . --output-folder=build --build=missing
+cd build
+cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(pwd)"
+make
+```
+
+## API
+
+See [xlog.h](xlog.h).

@@ -15,16 +15,15 @@ xlog_writer_t *xlog_writer_open(const char *path) {
 }
 
 void xlog_writer_commit(xlog_writer_t *w, void *buf, size_t sz) {
-    xlog_header_t *h = malloc(sizeof(xlog_header_t));
-    h->size = sz;
-    h->checksum = crc32c(0, buf, sz);
+    xlog_header_t h;
+    h.size = sz;
+    h.checksum = crc32c(0, buf, sz);
     flock(fileno(w->fd), LOCK_EX);
     fseek(w->fd, 0, SEEK_END);
-    fwrite(h, sizeof(xlog_header_t), 1, w->fd);
+    fwrite(&h, sizeof(xlog_header_t), 1, w->fd);
     fwrite(buf, sz, 1, w->fd);
     fflush(w->fd);
     flock(fileno(w->fd), LOCK_UN);
-    free(h);
 }
 
 void xlog_writer_close(xlog_writer_t *w) {
@@ -60,7 +59,10 @@ size_t xlog_reader_next(xlog_reader_t *r, void **buf) {
     }
 
     *buf = malloc(h.size);
-    if(!*buf) return 0;
+    if(!*buf) {
+        flock(fileno(r->fd), LOCK_UN);
+        return 0;
+    }
 
     if(fread(*buf, h.size, 1, r->fd) != 1) {
         free(*buf);

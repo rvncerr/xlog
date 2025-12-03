@@ -2,7 +2,8 @@
 #define XLOG_H
 
 #include <stdint.h>
-#include <malloc.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/file.h>
 #include <unistd.h>
 
