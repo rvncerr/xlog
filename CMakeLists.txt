@@ -7,6 +7,11 @@ set(CMAKE_CXX_STANDARD 17)
 find_package(cunit REQUIRED)
 
 add_library(xlog SHARED src/xlog.c src/crc32c.c)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i686")
+    set_source_files_properties(src/crc32c.c PROPERTIES COMPILE_FLAGS -msse4.2)
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+    set_source_files_properties(src/crc32c.c PROPERTIES COMPILE_FLAGS -march=armv8-a+crc)
+endif()
 target_include_directories(xlog PUBLIC include)
 target_include_directories(xlog PRIVATE src)
 

@@ -1,6 +1,39 @@
 #include "crc32c.h"
 
-static const uint32_t crc32c_table[] = {
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+    #ifdef __SSE4_2__
+        #define USE_SSE42_CRC32C
+        #include <nmmintrin.h>
+    #endif
+#elif defined(__aarch64__) || defined(_M_ARM64)
+    #ifdef __ARM_FEATURE_CRC32
+        #define USE_ARM_CRC32C
+        #include <arm_acle.h>
+    #endif
+#endif
+
+uint32_t crc32c(uint32_t crc, const void *buf, size_t size) {
+    const uint8_t *p = buf;
+    crc = ~crc;
+
+#if defined(USE_SSE42_CRC32C)
+    while (size >= 8) {
+        crc = (uint32_t)_mm_crc32_u64(crc, *(const uint64_t *)p);
+        p += 8;
+        size -= 8;
+    }
+    while (size--)
+        crc = _mm_crc32_u8(crc, *p++);
+#elif defined(USE_ARM_CRC32C)
+    while (size >= 8) {
+        crc = __crc32cd(crc, *(const uint64_t *)p);
+        p += 8;
+        size -= 8;
+    }
+    while (size--)
+        crc = __crc32cb(crc, *p++);
+#else
+    static const uint32_t crc32c_table[] = {
         0x00000000, 0xf26b8303, 0xe13b70f7, 0x1350f3f4,
         0xc79a971f, 0x35f1141c, 0x26a1e7e8, 0xd4ca64eb,
         0x8ad958cf, 0x78b2dbcc, 0x6be22838, 0x9989ab3b,
@@ -65,12 +98,10 @@ static const uint32_t crc32c_table[] = {
         0x34f4f86a, 0xc69f7b69, 0xd5cf889d, 0x27a40b9e,
         0x79b737ba, 0x8bdcb4b9, 0x988c474d, 0x6ae7c44e,
         0xbe2da0a5, 0x4c4623a6, 0x5f16d052, 0xad7d5351,
-};
-
-uint32_t crc32c(uint32_t crc, const void *buf, size_t size) {
-    const uint8_t *p = buf;
-    crc = ~crc;
+    };
     while (size--)
         crc = crc32c_table[(uint8_t)crc ^ *p++] ^ (crc >> 8);
+#endif
+
     return ~crc;
 }
