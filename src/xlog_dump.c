@@ -1,9 +1,41 @@
 #include "xlog.h"
-#include "hexdump.h"
 
+#include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
+
+static void hexdump(void *buf, size_t sz) {
+    for (size_t i = 0; i < sz / 16; i++) {
+        printf("%08zx  ", i * 16);
+        for (size_t j = 0; j < 16; j++) {
+            if(j == 8) printf(" ");
+            printf("%02x ", ((uint8_t *)buf)[i * 16 + j]);
+        }
+        printf("  |");
+        for (size_t j = 0; j < 16; j++) {
+            printf("%c", isprint(((uint8_t *)buf)[i * 16 + j]) ? ((uint8_t *)buf)[i * 16 + j] : '.');
+        }
+        printf("|\n");
+    }
+    if (sz % 16) {
+        printf("%08zx  ", sz / 16 * 16);
+        for (size_t j = 0; j < sz % 16; j++) {
+            if(j == 8) printf(" ");
+            printf("%02x ", ((uint8_t *)buf)[sz / 16 * 16 + j]);
+        }
+        for (size_t j = 0; j < 16 - sz % 16; j++) {
+            if(sz % 16 + j == 8) printf(" ");
+            printf("   ");
+        }
+        printf("  |");
+        for (size_t j = 0; j < sz % 16; j++) {
+            printf("%c", isprint(((uint8_t *)buf)[sz / 16 * 16 + j]) ? ((uint8_t *)buf)[sz / 16 * 16 + j] : '.');
+        }
+        printf("|\n");
+    }
+    printf("%08zx\n", sz);
+}
 
 int main(int argc, char **argv) {
     if(argc < 2) {
@@ -20,15 +52,10 @@ int main(int argc, char **argv) {
     char *buf;
     ssize_t sz;
 
-    bool first = true;
     while((sz = xlog_reader_next(r, (void **)&buf)) > 0) {
-        if(!first) {
-            printf("\n");
-        }
         hexdump(buf, sz);
+        printf("\n");
         free(buf);
-
-        first = false;
     }
 
     if(sz < 0) {
