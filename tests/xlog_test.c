@@ -149,7 +149,7 @@ static void test_xlog_reopen_append(void) {
 static void test_xlog_max_record_size(void) {
     unlink("test.xlog");
 
-    xlog_writer_t *w = xlog_writer_open_ex("test.xlog", 8);
+    xlog_writer_t *w = xlog_writer_open_ex("test.xlog", 8, XLOG_NOSYNC);
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
 
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "short", 6), 0);

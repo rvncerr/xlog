@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sys/file.h>
 
 #pragma pack(push, 1)
@@ -15,6 +16,7 @@ typedef struct {
 struct xlog_writer {
     FILE *fd;
     uint32_t max_record_size;
+    int flags;
 };
 
 struct xlog_reader {
@@ -22,7 +24,7 @@ struct xlog_reader {
     uint32_t max_record_size;
 };
 
-xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size) {
+xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags) {
     xlog_writer_t *w = malloc(sizeof(xlog_writer_t));
     if(!w) return NULL;
 
@@ -33,11 +35,12 @@ xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size) {
     }
 
     w->max_record_size = max_record_size;
+    w->flags = flags;
     return w;
 }
 
 xlog_writer_t *xlog_writer_open(const char *path) {
-    return xlog_writer_open_ex(path, UINT32_MAX);
+    return xlog_writer_open_ex(path, UINT32_MAX, 0);
 }
 
 int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz) {
@@ -54,6 +57,8 @@ int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz) {
         return XLOG_ERR_IO;
     }
     fflush(w->fd);
+    if(!(w->flags & XLOG_NOSYNC))
+        fdatasync(fileno(w->fd));
     flock(fileno(w->fd), LOCK_UN);
     return 0;
 }
