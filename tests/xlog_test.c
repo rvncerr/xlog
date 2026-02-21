@@ -281,7 +281,7 @@ int main(void) {
 
     if(CUE_SUCCESS != CU_initialize_registry()) return CU_get_error();
 
-    suite = CU_add_suite("crc32r", NULL, NULL);
+    suite = CU_add_suite("crc32c", NULL, NULL);
     if(NULL == suite) {
         CU_cleanup_registry();
         return CU_get_error();

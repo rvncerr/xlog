@@ -1,5 +1,9 @@
 #include "hexdump.h"
 
+#include <stdint.h>
+#include <stdio.h>
+#include <ctype.h>
+
 void hexdump(void *buf, size_t sz) {
     for (size_t i = 0; i < sz / 16; i++) {
         printf("%08zx  ", i * 16);
