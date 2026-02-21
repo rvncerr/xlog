@@ -3,39 +3,40 @@
 #include "endian.h"
 
 #include <fcntl.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #define XLOG_HEADER_SIZE 8
 
 struct xlog_writer {
-    FILE *fd;
+    int fd;
     uint32_t max_record_size;
     int flags;
 };
 
 struct xlog_reader {
-    FILE *fd;
+    int fd;
     uint32_t max_record_size;
 };
 
-static void xlog_lock(int fd) {
-    struct flock fl = { .l_type = F_WRLCK, .l_whence = SEEK_SET };
-    fcntl(fd, F_SETLKW, &fl);
-}
-
-static void xlog_unlock(int fd) {
-    struct flock fl = { .l_type = F_UNLCK, .l_whence = SEEK_SET };
-    fcntl(fd, F_SETLK, &fl);
+static ssize_t xlog_readall(int fd, void *buf, size_t n) {
+    uint8_t *p = buf;
+    while(n > 0) {
+        ssize_t r = read(fd, p, n);
+        if(r <= 0) return r;
+        p += r;
+        n -= r;
+    }
+    return p - (uint8_t *)buf;
 }
 
 xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags) {
     xlog_writer_t *w = malloc(sizeof(xlog_writer_t));
     if(!w) return NULL;
 
-    w->fd = fopen(path, "ab");
-    if(w->fd == NULL) {
+    w->fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if(w->fd < 0) {
         free(w);
         return NULL;
     }
@@ -56,23 +57,23 @@ int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz) {
     put_le32(hdr, (uint32_t)sz);
     put_le32(hdr + 4, crc32c(0, buf, sz));
 
-    int fd = fileno(w->fd);
-    xlog_lock(fd);
-    fseek(w->fd, 0, SEEK_END);
-    if(fwrite(hdr, XLOG_HEADER_SIZE, 1, w->fd) != 1 ||
-       fwrite(buf, sz, 1, w->fd) != 1) {
-        xlog_unlock(fd);
+    struct iovec iov[2] = {
+        { .iov_base = hdr,        .iov_len = XLOG_HEADER_SIZE },
+        { .iov_base = (void *)buf, .iov_len = sz },
+    };
+
+    ssize_t total = XLOG_HEADER_SIZE + sz;
+    if(writev(w->fd, iov, 2) != total)
         return XLOG_ERR_IO;
-    }
-    fflush(w->fd);
+
     if(!(w->flags & XLOG_NOSYNC))
-        fdatasync(fd);
-    xlog_unlock(fd);
+        fdatasync(w->fd);
+
     return 0;
 }
 
 void xlog_writer_close(xlog_writer_t *w) {
-    fclose(w->fd);
+    close(w->fd);
     free(w);
 }
 
@@ -80,8 +81,8 @@ xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size) {
     xlog_reader_t *r = malloc(sizeof(xlog_reader_t));
     if(!r) return NULL;
 
-    r->fd = fopen(path, "rb");
-    if(r->fd == NULL) {
+    r->fd = open(path, O_RDONLY);
+    if(r->fd < 0) {
         free(r);
         return NULL;
     }
@@ -95,12 +96,12 @@ xlog_reader_t *xlog_reader_open(const char *path) {
 }
 
 void xlog_reader_reset(xlog_reader_t *r) {
-    fseek(r->fd, 0, SEEK_SET);
+    lseek(r->fd, 0, SEEK_SET);
 }
 
 ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
     uint8_t hdr[XLOG_HEADER_SIZE];
-    if(fread(hdr, XLOG_HEADER_SIZE, 1, r->fd) != 1)
+    if(xlog_readall(r->fd, hdr, XLOG_HEADER_SIZE) != XLOG_HEADER_SIZE)
         return XLOG_EOF;
 
     uint32_t size = get_le32(hdr);
@@ -113,7 +114,7 @@ ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
     if(!*buf)
         return XLOG_ERR_MEM;
 
-    if(fread(*buf, size, 1, r->fd) != 1) {
+    if(xlog_readall(r->fd, *buf, size) != (ssize_t)size) {
         free(*buf);
         return XLOG_ERR_IO;
     }
@@ -127,6 +128,6 @@ ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
 }
 
 void xlog_reader_close(xlog_reader_t *r) {
-    fclose(r->fd);
+    close(r->fd);
     free(r);
 }
