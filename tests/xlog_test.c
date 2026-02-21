@@ -142,6 +142,45 @@ static void test_xlog_reopen_append(void) {
     xlog_reader_close(r);
 }
 
+static void test_xlog_max_record_size(void) {
+    unlink("test.xlog");
+
+    xlog_writer_t *w = xlog_writer_open_ex("test.xlog", 8);
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+
+    xlog_writer_commit(w, "short", 6);
+    xlog_writer_commit(w, "this is too long", 17);
+    xlog_writer_commit(w, "ok", 3);
+    xlog_writer_close(w);
+
+    char *rbuf;
+    size_t sz;
+    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 6);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "short");
+    free(rbuf);
+
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 3);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "ok");
+    free(rbuf);
+
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 0);
+    xlog_reader_close(r);
+
+    r = xlog_reader_open_ex("test.xlog", 4);
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 0);
+
+    xlog_reader_close(r);
+}
+
 static void test_xlog_2writers(void) {
     unlink("test.xlog");
 
@@ -213,6 +252,11 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_reopen_append", test_xlog_reopen_append)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_max_record_size", test_xlog_max_record_size)) {
         CU_cleanup_registry();
         return CU_get_error();
     }

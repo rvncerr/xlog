@@ -1,7 +1,7 @@
 #include "xlog.h"
 #include "crc32c.h"
 
-xlog_writer_t *xlog_writer_open(const char *path) {
+xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size) {
     xlog_writer_t *w = malloc(sizeof(xlog_writer_t));
     if(!w) return NULL;
 
@@ -11,10 +11,17 @@ xlog_writer_t *xlog_writer_open(const char *path) {
         return NULL;
     }
 
+    w->max_record_size = max_record_size;
     return w;
 }
 
+xlog_writer_t *xlog_writer_open(const char *path) {
+    return xlog_writer_open_ex(path, UINT32_MAX);
+}
+
 void xlog_writer_commit(xlog_writer_t *w, void *buf, size_t sz) {
+    if(sz == 0 || sz > w->max_record_size) return;
+
     xlog_header_t h;
     h.size = sz;
     h.checksum = crc32c(0, buf, sz);
@@ -31,7 +38,7 @@ void xlog_writer_close(xlog_writer_t *w) {
     free(w);
 }
 
-xlog_reader_t *xlog_reader_open(const char *path) {
+xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size) {
     xlog_reader_t *r = malloc(sizeof(xlog_reader_t));
     if(!r) return NULL;
 
@@ -41,7 +48,12 @@ xlog_reader_t *xlog_reader_open(const char *path) {
         return NULL;
     }
 
+    r->max_record_size = max_record_size;
     return r;
+}
+
+xlog_reader_t *xlog_reader_open(const char *path) {
+    return xlog_reader_open_ex(path, UINT32_MAX);
 }
 
 void xlog_reader_reset(xlog_reader_t *r) {
@@ -54,6 +66,11 @@ size_t xlog_reader_next(xlog_reader_t *r, void **buf) {
     xlog_header_t h;
     flock(fileno(r->fd), LOCK_SH);
     if(fread(&h, sizeof(h), 1, r->fd) != 1) {
+        flock(fileno(r->fd), LOCK_UN);
+        return 0;
+    }
+
+    if(h.size == 0 || h.size > r->max_record_size) {
         flock(fileno(r->fd), LOCK_UN);
         return 0;
     }
