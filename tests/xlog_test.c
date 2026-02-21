@@ -1,5 +1,9 @@
 #include <CUnit/CUnit.h>
 #include <CUnit/Basic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "xlog.h"
 #include "crc32c.h"
@@ -194,7 +198,7 @@ static void test_xlog_errors(void) {
     /* Reader: corrupt checksum returns XLOG_ERR_CRC */
     FILE *f = fopen("test.xlog", "r+b");
     CU_ASSERT_PTR_NOT_NULL_FATAL(f);
-    fseek(f, sizeof(xlog_header_t), SEEK_SET);
+    fseek(f, 8 /* sizeof(xlog_header_t) */, SEEK_SET);
     uint8_t garbage = 0xFF;
     fwrite(&garbage, 1, 1, f);
     fclose(f);
@@ -218,12 +222,10 @@ static void test_xlog_errors(void) {
 
     /* Reader: truncated payload returns XLOG_ERR_IO */
     unlink("test.xlog");
-    xlog_header_t h;
-    h.size = 100;
-    h.checksum = 0;
+    uint32_t fake_header[2] = { 100 /* size */, 0 /* checksum */ };
     f = fopen("test.xlog", "wb");
     CU_ASSERT_PTR_NOT_NULL_FATAL(f);
-    fwrite(&h, sizeof(h), 1, f);
+    fwrite(fake_header, sizeof(fake_header), 1, f);
     fwrite("short", 5, 1, f);
     fclose(f);
     r = xlog_reader_open("test.xlog");

@@ -2,10 +2,8 @@
 #define XLOG_H
 
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/file.h>
-#include <unistd.h>
+#include <stddef.h>
+#include <sys/types.h>
 
 #define XLOG_EOF       0
 #define XLOG_ERR_IO   -1
@@ -13,28 +11,14 @@
 #define XLOG_ERR_SIZE -3
 #define XLOG_ERR_MEM  -4
 
-#pragma pack(push, 1)
-typedef struct {
-    uint32_t size;
-    uint32_t checksum;
-} xlog_header_t;
-#pragma pack(pop)
-
-typedef struct {
-    FILE *fd;
-    uint32_t max_record_size;
-} xlog_reader_t;
+typedef struct xlog_reader xlog_reader_t;
+typedef struct xlog_writer xlog_writer_t;
 
 xlog_reader_t *xlog_reader_open(const char *path);
 xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size);
 void xlog_reader_reset(xlog_reader_t *r);
 ssize_t xlog_reader_next(xlog_reader_t *r, void **buf);
 void xlog_reader_close(xlog_reader_t *r);
-
-typedef struct {
-    FILE *fd;
-    uint32_t max_record_size;
-} xlog_writer_t;
 
 xlog_writer_t *xlog_writer_open(const char *path);
 xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size);

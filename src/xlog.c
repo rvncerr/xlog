@@ -1,6 +1,27 @@
 #include "xlog.h"
 #include "crc32c.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/file.h>
+
+#pragma pack(push, 1)
+typedef struct {
+    uint32_t size;
+    uint32_t checksum;
+} xlog_header_t;
+#pragma pack(pop)
+
+struct xlog_writer {
+    FILE *fd;
+    uint32_t max_record_size;
+};
+
+struct xlog_reader {
+    FILE *fd;
+    uint32_t max_record_size;
+};
+
 xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size) {
     xlog_writer_t *w = malloc(sizeof(xlog_writer_t));
     if(!w) return NULL;
