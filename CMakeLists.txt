@@ -7,7 +7,7 @@ find_package(cunit REQUIRED)
 
 include_directories(include)
 
-add_library(xlog SHARED src/xlog.c src/crc32c.c)
+add_library(xlog SHARED src/xlog.c src/crc32c.c src/endian.c)
 
 add_executable(xlog_dump src/xlog_dump.c src/hexdump.c)
 target_link_libraries(xlog_dump xlog)

@@ -1,17 +1,13 @@
 #include "xlog.h"
 #include "crc32c.h"
+#include "endian.h"
 
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#pragma pack(push, 1)
-typedef struct {
-    uint32_t size;
-    uint32_t checksum;
-} xlog_header_t;
-#pragma pack(pop)
+#define XLOG_HEADER_SIZE 8
 
 struct xlog_writer {
     FILE *fd;
@@ -56,13 +52,14 @@ xlog_writer_t *xlog_writer_open(const char *path) {
 int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz) {
     if(sz == 0 || sz > w->max_record_size) return XLOG_ERR_SIZE;
 
-    xlog_header_t h;
-    h.size = sz;
-    h.checksum = crc32c(0, buf, sz);
+    uint8_t hdr[XLOG_HEADER_SIZE];
+    put_le32(hdr, (uint32_t)sz);
+    put_le32(hdr + 4, crc32c(0, buf, sz));
+
     int fd = fileno(w->fd);
     xlog_lock(fd);
     fseek(w->fd, 0, SEEK_END);
-    if(fwrite(&h, sizeof(xlog_header_t), 1, w->fd) != 1 ||
+    if(fwrite(hdr, XLOG_HEADER_SIZE, 1, w->fd) != 1 ||
        fwrite(buf, sz, 1, w->fd) != 1) {
         xlog_unlock(fd);
         return XLOG_ERR_IO;
@@ -102,28 +99,31 @@ void xlog_reader_reset(xlog_reader_t *r) {
 }
 
 ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
-    xlog_header_t h;
-    if(fread(&h, sizeof(h), 1, r->fd) != 1)
+    uint8_t hdr[XLOG_HEADER_SIZE];
+    if(fread(hdr, XLOG_HEADER_SIZE, 1, r->fd) != 1)
         return XLOG_EOF;
 
-    if(h.size == 0 || h.size > r->max_record_size)
+    uint32_t size = get_le32(hdr);
+    uint32_t checksum = get_le32(hdr + 4);
+
+    if(size == 0 || size > r->max_record_size)
         return XLOG_ERR_SIZE;
 
-    *buf = malloc(h.size);
+    *buf = malloc(size);
     if(!*buf)
         return XLOG_ERR_MEM;
 
-    if(fread(*buf, h.size, 1, r->fd) != 1) {
+    if(fread(*buf, size, 1, r->fd) != 1) {
         free(*buf);
         return XLOG_ERR_IO;
     }
 
-    if(h.checksum != crc32c(0, *buf, h.size)) {
+    if(checksum != crc32c(0, *buf, size)) {
         free(*buf);
         return XLOG_ERR_CRC;
     }
 
-    return h.size;
+    return size;
 }
 
 void xlog_reader_close(xlog_reader_t *r) {

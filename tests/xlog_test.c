@@ -222,7 +222,10 @@ static void test_xlog_errors(void) {
 
     /* Reader: truncated payload returns XLOG_ERR_IO */
     unlink("test.xlog");
-    uint32_t fake_header[2] = { 100 /* size */, 0 /* checksum */ };
+    uint8_t fake_header[8] = {
+        100, 0, 0, 0,  /* size = 100 (little-endian) */
+          0, 0, 0, 0,  /* checksum = 0 */
+    };
     f = fopen("test.xlog", "wb");
     CU_ASSERT_PTR_NOT_NULL_FATAL(f);
     fwrite(fake_header, sizeof(fake_header), 1, f);
