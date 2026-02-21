@@ -1,10 +1,10 @@
 #include "xlog.h"
 #include "crc32c.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/file.h>
 
 #pragma pack(push, 1)
 typedef struct {
@@ -23,6 +23,16 @@ struct xlog_reader {
     FILE *fd;
     uint32_t max_record_size;
 };
+
+static void xlog_lock(int fd) {
+    struct flock fl = { .l_type = F_WRLCK, .l_whence = SEEK_SET };
+    fcntl(fd, F_SETLKW, &fl);
+}
+
+static void xlog_unlock(int fd) {
+    struct flock fl = { .l_type = F_UNLCK, .l_whence = SEEK_SET };
+    fcntl(fd, F_SETLK, &fl);
+}
 
 xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags) {
     xlog_writer_t *w = malloc(sizeof(xlog_writer_t));
@@ -49,17 +59,18 @@ int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz) {
     xlog_header_t h;
     h.size = sz;
     h.checksum = crc32c(0, buf, sz);
-    flock(fileno(w->fd), LOCK_EX);
+    int fd = fileno(w->fd);
+    xlog_lock(fd);
     fseek(w->fd, 0, SEEK_END);
     if(fwrite(&h, sizeof(xlog_header_t), 1, w->fd) != 1 ||
        fwrite(buf, sz, 1, w->fd) != 1) {
-        flock(fileno(w->fd), LOCK_UN);
+        xlog_unlock(fd);
         return XLOG_ERR_IO;
     }
     fflush(w->fd);
     if(!(w->flags & XLOG_NOSYNC))
-        fdatasync(fileno(w->fd));
-    flock(fileno(w->fd), LOCK_UN);
+        fdatasync(fd);
+    xlog_unlock(fd);
     return 0;
 }
 
@@ -87,37 +98,25 @@ xlog_reader_t *xlog_reader_open(const char *path) {
 }
 
 void xlog_reader_reset(xlog_reader_t *r) {
-    flock(fileno(r->fd), LOCK_SH);
     fseek(r->fd, 0, SEEK_SET);
-    flock(fileno(r->fd), LOCK_UN);
 }
 
 ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
     xlog_header_t h;
-    flock(fileno(r->fd), LOCK_SH);
-    if(fread(&h, sizeof(h), 1, r->fd) != 1) {
-        flock(fileno(r->fd), LOCK_UN);
+    if(fread(&h, sizeof(h), 1, r->fd) != 1)
         return XLOG_EOF;
-    }
 
-    if(h.size == 0 || h.size > r->max_record_size) {
-        flock(fileno(r->fd), LOCK_UN);
+    if(h.size == 0 || h.size > r->max_record_size)
         return XLOG_ERR_SIZE;
-    }
 
     *buf = malloc(h.size);
-    if(!*buf) {
-        flock(fileno(r->fd), LOCK_UN);
+    if(!*buf)
         return XLOG_ERR_MEM;
-    }
 
     if(fread(*buf, h.size, 1, r->fd) != 1) {
         free(*buf);
-        flock(fileno(r->fd), LOCK_UN);
         return XLOG_ERR_IO;
     }
-
-    flock(fileno(r->fd), LOCK_UN);
 
     if(h.checksum != crc32c(0, *buf, h.size)) {
         free(*buf);
