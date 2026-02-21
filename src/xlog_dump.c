@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     }
 
     char *buf;
-    size_t sz;
+    ssize_t sz;
 
     bool first = true;
     while((sz = xlog_reader_next(r, (void **)&buf)) > 0) {
@@ -29,6 +29,12 @@ int main(int argc, char **argv) {
         free(buf);
 
         first = false;
+    }
+
+    if(sz < 0) {
+        fprintf(stderr, "Error reading xlog: %zd\n", sz);
+        xlog_reader_close(r);
+        return EXIT_FAILURE;
     }
 
     xlog_reader_close(r);
