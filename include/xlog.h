@@ -22,7 +22,7 @@ void xlog_reader_close(xlog_reader_t *r);
 
 xlog_writer_t *xlog_writer_open(const char *path);
 xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size);
-int xlog_writer_commit(xlog_writer_t *w, void *buf, size_t sz);
+int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz);
 void xlog_writer_close(xlog_writer_t *w);
 
 #endif // XLOG_H

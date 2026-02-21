@@ -40,7 +40,7 @@ xlog_writer_t *xlog_writer_open(const char *path) {
     return xlog_writer_open_ex(path, UINT32_MAX);
 }
 
-int xlog_writer_commit(xlog_writer_t *w, void *buf, size_t sz) {
+int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz) {
     if(sz == 0 || sz > w->max_record_size) return XLOG_ERR_SIZE;
 
     xlog_header_t h;
