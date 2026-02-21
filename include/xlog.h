@@ -13,6 +13,10 @@
 
 #define XLOG_NOSYNC  (1 << 0)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct xlog_reader xlog_reader_t;
 typedef struct xlog_writer xlog_writer_t;
 
@@ -26,5 +30,9 @@ xlog_writer_t *xlog_writer_open(const char *path);
 xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags);
 int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz);
 void xlog_writer_close(xlog_writer_t *w);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // XLOG_H
