@@ -8,3 +8,4 @@ xlog_dump
 xlog_test
 *.so
 *.xlog
+build

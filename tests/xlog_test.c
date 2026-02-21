@@ -108,6 +108,40 @@ static void test_xlog_multi(void) {
     xlog_reader_close(r);
 }
 
+static void test_xlog_reopen_append(void) {
+    unlink("test.xlog");
+
+    xlog_writer_t *w1 = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w1);
+    xlog_writer_commit(w1, "first", 6);
+    xlog_writer_close(w1);
+
+    xlog_writer_t *w2 = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w2);
+    xlog_writer_commit(w2, "second", 7);
+    xlog_writer_close(w2);
+
+    char *rbuf;
+    size_t sz;
+    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 6);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "first");
+    free(rbuf);
+
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 7);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "second");
+    free(rbuf);
+
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 0);
+
+    xlog_reader_close(r);
+}
+
 static void test_xlog_2writers(void) {
     unlink("test.xlog");
 
@@ -174,6 +208,11 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_multi", test_xlog_multi)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_reopen_append", test_xlog_reopen_append)) {
         CU_cleanup_registry();
         return CU_get_error();
     }

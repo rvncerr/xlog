@@ -5,7 +5,7 @@ xlog_writer_t *xlog_writer_open(const char *path) {
     xlog_writer_t *w = malloc(sizeof(xlog_writer_t));
     if(!w) return NULL;
 
-    w->fd = fopen(path, "wb");
+    w->fd = fopen(path, "ab");
     if(w->fd == NULL) {
         free(w);
         return NULL;
