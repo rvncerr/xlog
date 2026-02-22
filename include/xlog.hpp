@@ -67,8 +67,8 @@ public:
         if(!r_) throw error(XLOG_ERR_IO, "xlog: failed to open reader");
     }
 
-    reader(const char *path, uint32_t max_record_size) {
-        r_ = xlog_reader_open_ex(path, max_record_size);
+    reader(const char *path, uint32_t max_record_size, int flags = 0) {
+        r_ = xlog_reader_open_ex(path, max_record_size, flags);
         if(!r_) throw error(XLOG_ERR_IO, "xlog: failed to open reader");
     }
 

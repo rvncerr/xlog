@@ -11,7 +11,9 @@
 #define XLOG_ERR_SIZE -3
 #define XLOG_ERR_MEM  -4
 
-#define XLOG_NOSYNC  (1 << 0)
+#define XLOG_NOSYNC       (1 << 0)
+#define XLOG_SKIP_CORRUPT (1 << 1)
+#define XLOG_SKIP_BADSIZE (1 << 2)
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,7 +23,7 @@ typedef struct xlog_reader xlog_reader_t;
 typedef struct xlog_writer xlog_writer_t;
 
 xlog_reader_t *xlog_reader_open(const char *path);
-xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size);
+xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags);
 void xlog_reader_reset(xlog_reader_t *r);
 ssize_t xlog_reader_next(xlog_reader_t *r, void **buf);
 void xlog_reader_close(xlog_reader_t *r);

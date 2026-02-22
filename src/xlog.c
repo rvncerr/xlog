@@ -18,13 +18,14 @@ struct xlog_writer {
 struct xlog_reader {
     int fd;
     uint32_t max_record_size;
+    int flags;
 };
 
 static ssize_t xlog_readall(int fd, void *buf, size_t n) {
     uint8_t *p = buf;
     while(n > 0) {
         ssize_t r = read(fd, p, n);
-        if(r <= 0) return r;
+        if(r <= 0) return p - (uint8_t *)buf;
         p += r;
         n -= r;
     }
@@ -77,7 +78,7 @@ void xlog_writer_close(xlog_writer_t *w) {
     free(w);
 }
 
-xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size) {
+xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags) {
     xlog_reader_t *r = malloc(sizeof(xlog_reader_t));
     if(!r) return NULL;
 
@@ -88,18 +89,19 @@ xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size) {
     }
 
     r->max_record_size = max_record_size;
+    r->flags = flags;
     return r;
 }
 
 xlog_reader_t *xlog_reader_open(const char *path) {
-    return xlog_reader_open_ex(path, UINT32_MAX);
+    return xlog_reader_open_ex(path, UINT32_MAX, 0);
 }
 
 void xlog_reader_reset(xlog_reader_t *r) {
     lseek(r->fd, 0, SEEK_SET);
 }
 
-ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
+static ssize_t xlog_read_record(xlog_reader_t *r, void **buf) {
     uint8_t hdr[XLOG_HEADER_SIZE];
     if(xlog_readall(r->fd, hdr, XLOG_HEADER_SIZE) != XLOG_HEADER_SIZE)
         return XLOG_EOF;
@@ -125,6 +127,30 @@ ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
     }
 
     return size;
+}
+
+ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
+    int scanning = 0;
+
+    for(;;) {
+        off_t pos = lseek(r->fd, 0, SEEK_CUR);
+        ssize_t rc = xlog_read_record(r, buf);
+
+        if(rc >= 0) { return rc; }
+        if(rc == XLOG_ERR_MEM) { return rc; }
+        if(rc == XLOG_EOF) { return scanning ? XLOG_EOF : rc; }
+
+        if(rc == XLOG_ERR_CRC && !scanning && (r->flags & XLOG_SKIP_CORRUPT))
+            continue;
+
+        if(r->flags & XLOG_SKIP_BADSIZE) {
+            scanning = 1;
+            lseek(r->fd, pos + 1, SEEK_SET);
+            continue;
+        }
+
+        return rc;
+    }
 }
 
 void xlog_reader_close(xlog_reader_t *r) {

@@ -1,5 +1,6 @@
 #include <CUnit/CUnit.h>
 #include <CUnit/Basic.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -176,7 +177,7 @@ static void test_xlog_max_record_size(void) {
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
     xlog_reader_close(r);
 
-    r = xlog_reader_open_ex("test.xlog", 4);
+    r = xlog_reader_open_ex("test.xlog", 4, 0);
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
 
     sz = xlog_reader_next(r, (void **)&rbuf);
@@ -235,6 +236,102 @@ static void test_xlog_errors(void) {
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     sz = xlog_reader_next(r, (void **)&rbuf);
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_IO);
+    xlog_reader_close(r);
+}
+
+static void test_xlog_skip_corrupt(void) {
+    unlink("test.xlog");
+
+    xlog_writer_t *w = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "aaa", 4), 0);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "bbb", 4), 0);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "ccc", 4), 0);
+    xlog_writer_close(w);
+
+    /* Corrupt the payload of the second record */
+    int fd = open("test.xlog", O_RDWR);
+    CU_ASSERT_FATAL(fd >= 0);
+    /* record 1: 8 hdr + 4 data = 12 bytes, record 2 header at offset 12, payload at 20 */
+    lseek(fd, 20, SEEK_SET);
+    uint8_t garbage = 0xFF;
+    write(fd, &garbage, 1);
+    close(fd);
+
+    /* Without XLOG_SKIP_CORRUPT: stops at corrupt record */
+    char *rbuf;
+    ssize_t sz;
+    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 4);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "aaa");
+    free(rbuf);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_CRC);
+    xlog_reader_close(r);
+
+    /* With XLOG_SKIP_CORRUPT: skips corrupt, reads third record */
+    r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_CORRUPT);
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 4);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "aaa");
+    free(rbuf);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 4);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "ccc");
+    free(rbuf);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
+    xlog_reader_close(r);
+}
+
+static void test_xlog_skip_badsize(void) {
+    unlink("test.xlog");
+
+    /* Write: [aaa] [bbb] [ccc] */
+    xlog_writer_t *w = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "aaa", 4), 0);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "bbb", 4), 0);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "ccc", 4), 0);
+    xlog_writer_close(w);
+
+    /* Corrupt the size field of the second record (offset 12) */
+    int fd = open("test.xlog", O_RDWR);
+    CU_ASSERT_FATAL(fd >= 0);
+    uint8_t bad_size[4] = { 0, 0, 0, 0 };
+    lseek(fd, 12, SEEK_SET);
+    write(fd, bad_size, 4);
+    close(fd);
+
+    /* Without flag: stops at bad size */
+    char *rbuf;
+    ssize_t sz;
+    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 4);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "aaa");
+    free(rbuf);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_SIZE);
+    xlog_reader_close(r);
+
+    /* With XLOG_SKIP_BADSIZE: scans forward, finds third record */
+    r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_BADSIZE);
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 4);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "aaa");
+    free(rbuf);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, 4);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "ccc");
+    free(rbuf);
+    sz = xlog_reader_next(r, (void **)&rbuf);
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
     xlog_reader_close(r);
 }
 
@@ -319,6 +416,16 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_errors", test_xlog_errors)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_skip_corrupt", test_xlog_skip_corrupt)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_skip_badsize", test_xlog_skip_badsize)) {
         CU_cleanup_registry();
         return CU_get_error();
     }
