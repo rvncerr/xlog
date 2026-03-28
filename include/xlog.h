@@ -28,6 +28,7 @@ extern "C" {
 typedef struct xlog_reader xlog_reader;
 typedef struct xlog_writer xlog_writer;
 
+/* Open functions return NULL on failure with errno set. */
 XLOG_API xlog_reader *xlog_reader_open(const char *path);
 XLOG_API xlog_reader *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags);
 XLOG_API void xlog_reader_reset(xlog_reader *r);

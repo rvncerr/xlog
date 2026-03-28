@@ -64,6 +64,12 @@ make
 ./test_xlog && ./test_xlog_cpp
 ```
 
+## Thread Safety
+
+- Multiple writers to the same file from separate handles are safe (`O_APPEND` + `writev` atomicity).
+- A single `xlog_reader` or `xlog_writer` must not be used from multiple threads concurrently.
+- Separate reader/writer handles may be used concurrently without synchronization.
+
 ## API
 
 - C: [include/xlog.h](include/xlog.h)
