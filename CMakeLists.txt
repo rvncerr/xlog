@@ -12,6 +12,8 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|i686")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
     set_source_files_properties(src/crc32c.c PROPERTIES COMPILE_FLAGS -march=armv8-a+crc)
 endif()
+set_target_properties(xlog PROPERTIES C_VISIBILITY_PRESET hidden)
+target_compile_definitions(xlog PRIVATE XLOG_BUILDING)
 target_include_directories(xlog PUBLIC include)
 target_include_directories(xlog PRIVATE src)
 
