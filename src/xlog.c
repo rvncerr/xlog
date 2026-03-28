@@ -102,7 +102,7 @@ void xlog_reader_reset(xlog_reader *r) {
     lseek(r->fd, 0, SEEK_SET);
 }
 
-static ssize_t xlog_read_record(xlog_reader *r, void **buf) {
+static ssize_t xlog_decode(xlog_reader *r, void *buf, size_t cap) {
     uint8_t hdr[XLOG_HEADER_SIZE];
     if(xlog_readall(r->fd, hdr, XLOG_HEADER_SIZE) != XLOG_HEADER_SIZE)
         return XLOG_EOF;
@@ -113,32 +113,26 @@ static ssize_t xlog_read_record(xlog_reader *r, void **buf) {
     if(size == 0 || size > r->max_record_size)
         return XLOG_ERR_SIZE;
 
-    *buf = malloc(size);
-    if(!*buf)
-        return XLOG_ERR_MEM;
+    if(size > cap)
+        return XLOG_ERR_SIZE;
 
-    if(xlog_readall(r->fd, *buf, size) != (ssize_t)size) {
-        free(*buf);
+    if(xlog_readall(r->fd, buf, size) != (ssize_t)size)
         return XLOG_ERR_IO;
-    }
 
-    if(checksum != crc32c(0, *buf, size)) {
-        free(*buf);
+    if(checksum != crc32c(0, buf, size))
         return XLOG_ERR_CRC;
-    }
 
     return size;
 }
 
-ssize_t xlog_reader_next(xlog_reader *r, void **buf) {
+ssize_t xlog_reader_next(xlog_reader *r, void *buf, size_t cap) {
     int scanning = 0;
 
     for(;;) {
         off_t pos = lseek(r->fd, 0, SEEK_CUR);
-        ssize_t rc = xlog_read_record(r, buf);
+        ssize_t rc = xlog_decode(r, buf, cap);
 
         if(rc >= 0) { return rc; }
-        if(rc == XLOG_ERR_MEM) { return rc; }
         if(rc == XLOG_EOF) { return scanning ? XLOG_EOF : rc; }
 
         if(rc == XLOG_ERR_CRC && !scanning && (r->flags & XLOG_SKIP_CORRUPT))

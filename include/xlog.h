@@ -31,7 +31,7 @@ typedef struct xlog_writer xlog_writer;
 XLOG_API xlog_reader *xlog_reader_open(const char *path);
 XLOG_API xlog_reader *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags);
 XLOG_API void xlog_reader_reset(xlog_reader *r);
-XLOG_API ssize_t xlog_reader_next(xlog_reader *r, void **buf);
+XLOG_API ssize_t xlog_reader_next(xlog_reader *r, void *buf, size_t cap);
 XLOG_API void xlog_reader_close(xlog_reader *r);
 
 XLOG_API xlog_writer *xlog_writer_open(const char *path);

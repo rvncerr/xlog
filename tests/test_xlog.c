@@ -9,6 +9,8 @@
 #include "xlog.h"
 #include "crc32c.h"
 
+#define RBUF_SIZE 4096
+
 static void test_crc32c(void) {
     uint8_t t32_0[32] = {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -57,13 +59,12 @@ static void test_xlog_basic(void) {
     CU_ASSERT_EQUAL(xlog_writer_commit(w, wbuf, strlen(wbuf) + 1), 0);
     xlog_writer_close(w);
 
-    char *rbuf;
+    char rbuf[RBUF_SIZE];
     xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
-    ssize_t sz = xlog_reader_next(r, (void **)&rbuf);
-    CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(rbuf) + 1));
+    ssize_t sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(wbuf) + 1));
     CU_ASSERT_STRING_EQUAL_FATAL(wbuf, rbuf);
-    free(rbuf);
     xlog_reader_close(r);
 }
 
@@ -79,35 +80,33 @@ static void test_xlog_multi(void) {
     }
     xlog_writer_close(w);
 
-    char *rbuf;
+    char rbuf[RBUF_SIZE];
     ssize_t sz;
 
     xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     for(int i = 0; i < 1000; i++) {
-        sz = xlog_reader_next(r, (void **)&rbuf);
-        CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(rbuf) + 1));
+        sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
         char buf[32];
         sprintf(buf, "Hello, world! %d", i);
+        CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(buf) + 1));
         CU_ASSERT_STRING_EQUAL_FATAL(buf, rbuf);
-        free(rbuf);
     }
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
 
     xlog_reader_reset(r);
 
     for(int i = 0; i < 1000; i++) {
-        sz = xlog_reader_next(r, (void **)&rbuf);
-        CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(rbuf) + 1));
+        sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
         char buf[32];
         sprintf(buf, "Hello, world! %d", i);
+        CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(buf) + 1));
         CU_ASSERT_STRING_EQUAL_FATAL(buf, rbuf);
-        free(rbuf);
     }
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
 
     xlog_reader_close(r);
@@ -126,22 +125,20 @@ static void test_xlog_reopen_append(void) {
     CU_ASSERT_EQUAL(xlog_writer_commit(w2, "second", 7), 0);
     xlog_writer_close(w2);
 
-    char *rbuf;
+    char rbuf[RBUF_SIZE];
     ssize_t sz;
     xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 6);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "first");
-    free(rbuf);
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 7);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "second");
-    free(rbuf);
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
 
     xlog_reader_close(r);
@@ -158,29 +155,27 @@ static void test_xlog_max_record_size(void) {
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "ok", 3), 0);
     xlog_writer_close(w);
 
-    char *rbuf;
+    char rbuf[RBUF_SIZE];
     ssize_t sz;
     xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 6);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "short");
-    free(rbuf);
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 3);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "ok");
-    free(rbuf);
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
     xlog_reader_close(r);
 
     r = xlog_reader_open_ex("test.xlog", 4, 0);
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_SIZE);
 
     xlog_reader_close(r);
@@ -199,15 +194,15 @@ static void test_xlog_errors(void) {
     /* Reader: corrupt checksum returns XLOG_ERR_CRC */
     FILE *f = fopen("test.xlog", "r+b");
     CU_ASSERT_PTR_NOT_NULL_FATAL(f);
-    fseek(f, 8 /* sizeof(xlog_header_t) */, SEEK_SET);
+    fseek(f, 8, SEEK_SET);
     uint8_t garbage = 0xFF;
     fwrite(&garbage, 1, 1, f);
     fclose(f);
 
-    char *rbuf;
+    char rbuf[RBUF_SIZE];
     xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
-    ssize_t sz = xlog_reader_next(r, (void **)&rbuf);
+    ssize_t sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_CRC);
     xlog_reader_close(r);
 
@@ -217,7 +212,7 @@ static void test_xlog_errors(void) {
     fclose(f);
     r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
     xlog_reader_close(r);
 
@@ -234,7 +229,7 @@ static void test_xlog_errors(void) {
     fclose(f);
     r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_IO);
     xlog_reader_close(r);
 }
@@ -259,30 +254,27 @@ static void test_xlog_skip_corrupt(void) {
     close(fd);
 
     /* Without XLOG_SKIP_CORRUPT: stops at corrupt record */
-    char *rbuf;
+    char rbuf[RBUF_SIZE];
     ssize_t sz;
     xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 4);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "aaa");
-    free(rbuf);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_CRC);
     xlog_reader_close(r);
 
     /* With XLOG_SKIP_CORRUPT: skips corrupt, reads third record */
     r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_CORRUPT);
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 4);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "aaa");
-    free(rbuf);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 4);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "ccc");
-    free(rbuf);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
     xlog_reader_close(r);
 }
@@ -307,30 +299,27 @@ static void test_xlog_skip_badsize(void) {
     close(fd);
 
     /* Without flag: stops at bad size */
-    char *rbuf;
+    char rbuf[RBUF_SIZE];
     ssize_t sz;
     xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 4);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "aaa");
-    free(rbuf);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_SIZE);
     xlog_reader_close(r);
 
     /* With XLOG_SKIP_BADSIZE: scans forward, finds third record */
     r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_BADSIZE);
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 4);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "aaa");
-    free(rbuf);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 4);
     CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "ccc");
-    free(rbuf);
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
     xlog_reader_close(r);
 }
@@ -353,21 +342,20 @@ static void test_xlog_2writers(void) {
     xlog_writer_close(w1);
     xlog_writer_close(w2);
 
-    char *rbuf;
+    char rbuf[RBUF_SIZE];
     ssize_t sz;
 
     xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     for(int i = 0; i < 100000; i++) {
-        sz = xlog_reader_next(r, (void **)&rbuf);
-        CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(rbuf) + 1));
+        sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
         char buf[32];
         sprintf(buf, "Hello, world! %d", i);
+        CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(buf) + 1));
         CU_ASSERT_STRING_EQUAL_FATAL(buf, rbuf);
-        free(rbuf);
     }
 
-    sz = xlog_reader_next(r, (void **)&rbuf);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
 
     xlog_reader_close(r);

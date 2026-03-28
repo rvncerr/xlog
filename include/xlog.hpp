@@ -2,7 +2,6 @@
 #define XLOG_HPP
 
 #include "xlog.h"
-#include <cstdlib>
 #include <stdexcept>
 #include <vector>
 
@@ -78,20 +77,18 @@ public:
 
     void reset() { xlog_reader_reset(r_); }
 
-    ssize_t next(void **buf) {
-        ssize_t sz = xlog_reader_next(r_, buf);
+    ssize_t next(void *buf, size_t cap) {
+        ssize_t sz = xlog_reader_next(r_, buf, cap);
         if(sz < 0) throw_error((int)sz);
         return sz;
     }
 
-    std::vector<uint8_t> next() {
-        void *buf;
-        ssize_t sz = xlog_reader_next(r_, &buf);
+    std::vector<uint8_t> next(size_t cap = 65536) {
+        std::vector<uint8_t> buf(cap);
+        ssize_t sz = xlog_reader_next(r_, buf.data(), buf.size());
         if(sz < 0) throw_error((int)sz);
-        if(sz == 0) return {};
-        std::vector<uint8_t> result((uint8_t *)buf, (uint8_t *)buf + sz);
-        free(buf);
-        return result;
+        buf.resize(sz);
+        return buf;
     }
 
 private:

@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define DUMP_BUF_SIZE (1024 * 1024)
+
 static void hexdump(void *buf, size_t sz) {
     for (size_t i = 0; i < sz / 16; i++) {
         printf("%08zx  ", i * 16);
@@ -43,27 +45,33 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    xlog_reader *r = xlog_reader_open(argv[1]);
+    xlog_reader *r = xlog_reader_open_ex(argv[1], DUMP_BUF_SIZE, 0);
     if(!r) {
         fprintf(stderr, "Failed to open xlog file: %s\n", argv[1]);
         return EXIT_FAILURE;
     }
 
-    char *buf;
-    ssize_t sz;
-
-    while((sz = xlog_reader_next(r, (void **)&buf)) > 0) {
-        hexdump(buf, sz);
-        printf("\n");
-        free(buf);
-    }
-
-    if(sz < 0) {
-        fprintf(stderr, "Error reading xlog: %zd\n", sz);
+    uint8_t *buf = malloc(DUMP_BUF_SIZE);
+    if(!buf) {
+        fprintf(stderr, "Out of memory\n");
         xlog_reader_close(r);
         return EXIT_FAILURE;
     }
 
+    ssize_t sz;
+    while((sz = xlog_reader_next(r, buf, DUMP_BUF_SIZE)) > 0) {
+        hexdump(buf, sz);
+        printf("\n");
+    }
+
+    if(sz < 0) {
+        fprintf(stderr, "Error reading xlog: %s\n", xlog_strerror((int)sz));
+        free(buf);
+        xlog_reader_close(r);
+        return EXIT_FAILURE;
+    }
+
+    free(buf);
     xlog_reader_close(r);
 
     return EXIT_SUCCESS;

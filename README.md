@@ -22,11 +22,10 @@ xlog_writer_close(w);
 
 /* Read */
 xlog_reader *r = xlog_reader_open("my.xlog");
-void *buf;
+char buf[4096];
 ssize_t sz;
-while ((sz = xlog_reader_next(r, &buf)) > 0) {
+while ((sz = xlog_reader_next(r, buf, sizeof(buf))) > 0) {
     /* process buf (sz bytes) */
-    free(buf);
 }
 if (sz < 0) { /* handle error */ }
 xlog_reader_close(r);
