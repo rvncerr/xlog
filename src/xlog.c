@@ -2,6 +2,7 @@
 #include "crc32c.h"
 #include "endian.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <sys/uio.h>
@@ -25,7 +26,11 @@ static ssize_t xlog_readall(int fd, void *buf, size_t n) {
     uint8_t *p = buf;
     while(n > 0) {
         ssize_t r = read(fd, p, n);
-        if(r <= 0) return p - (uint8_t *)buf;
+        if(r < 0) {
+            if(errno == EINTR) continue;
+            return p - (uint8_t *)buf;
+        }
+        if(r == 0) return p - (uint8_t *)buf;
         p += r;
         n -= r;
     }
@@ -64,19 +69,25 @@ int xlog_writer_commit(xlog_writer *w, const void *buf, size_t sz) {
     };
 
     ssize_t total = XLOG_HEADER_SIZE + sz;
-    if(writev(w->fd, iov, 2) != total)
+    ssize_t written;
+    while((written = writev(w->fd, iov, 2)) < 0 && errno == EINTR)
+        ;
+    if(written != total)
         return XLOG_ERR_IO;
 
-    if(!(w->flags & XLOG_NOSYNC))
-        fdatasync(w->fd);
+    if(!(w->flags & XLOG_NOSYNC)) {
+        if(fdatasync(w->fd) < 0)
+            return XLOG_ERR_SYNC;
+    }
 
     return 0;
 }
 
-void xlog_writer_close(xlog_writer *w) {
-    if(!w) return;
-    close(w->fd);
+int xlog_writer_close(xlog_writer *w) {
+    if(!w) return 0;
+    int rc = close(w->fd) < 0 ? XLOG_ERR_IO : 0;
     free(w);
+    return rc;
 }
 
 xlog_reader *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags) {
@@ -98,8 +109,8 @@ xlog_reader *xlog_reader_open(const char *path) {
     return xlog_reader_open_ex(path, UINT32_MAX, 0);
 }
 
-void xlog_reader_reset(xlog_reader *r) {
-    lseek(r->fd, 0, SEEK_SET);
+int xlog_reader_reset(xlog_reader *r) {
+    return lseek(r->fd, 0, SEEK_SET) < 0 ? XLOG_ERR_IO : 0;
 }
 
 static ssize_t xlog_decode(xlog_reader *r, void *buf, size_t cap) {
@@ -130,17 +141,18 @@ ssize_t xlog_reader_next(xlog_reader *r, void *buf, size_t cap) {
 
     for(;;) {
         off_t pos = lseek(r->fd, 0, SEEK_CUR);
+        if(pos < 0) return XLOG_ERR_IO;
         ssize_t rc = xlog_decode(r, buf, cap);
 
         if(rc >= 0) { return rc; }
-        if(rc == XLOG_EOF) { return scanning ? XLOG_EOF : rc; }
+        if(rc == XLOG_EOF) { return XLOG_EOF; }
 
         if(rc == XLOG_ERR_CRC && !scanning && (r->flags & XLOG_SKIP_CORRUPT))
             continue;
 
         if(r->flags & XLOG_SKIP_BADSIZE) {
             scanning = 1;
-            lseek(r->fd, pos + 1, SEEK_SET);
+            if(lseek(r->fd, pos + 1, SEEK_SET) < 0) return XLOG_ERR_IO;
             continue;
         }
 
@@ -161,6 +173,7 @@ const char *xlog_strerror(int code) {
     case XLOG_ERR_CRC:  return "checksum mismatch";
     case XLOG_ERR_SIZE: return "invalid record size";
     case XLOG_ERR_MEM:  return "out of memory";
+    case XLOG_ERR_SYNC: return "sync failed, data written but not durable";
     default:            return "unknown error";
     }
 }

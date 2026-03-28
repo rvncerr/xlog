@@ -1,4 +1,5 @@
 #include "crc32c.h"
+#include <string.h>
 
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
     #ifdef __SSE4_2__
@@ -18,7 +19,9 @@ uint32_t crc32c(uint32_t crc, const void *buf, size_t size) {
 
 #if defined(USE_SSE42_CRC32C)
     while (size >= 8) {
-        crc = (uint32_t)_mm_crc32_u64(crc, *(const uint64_t *)p);
+        uint64_t v;
+        memcpy(&v, p, 8);
+        crc = (uint32_t)_mm_crc32_u64(crc, v);
         p += 8;
         size -= 8;
     }
@@ -26,7 +29,9 @@ uint32_t crc32c(uint32_t crc, const void *buf, size_t size) {
         crc = _mm_crc32_u8(crc, *p++);
 #elif defined(USE_ARM_CRC32C)
     while (size >= 8) {
-        crc = __crc32cd(crc, *(const uint64_t *)p);
+        uint64_t v;
+        memcpy(&v, p, 8);
+        crc = __crc32cd(crc, v);
         p += 8;
         size -= 8;
     }

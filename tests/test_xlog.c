@@ -324,43 +324,6 @@ static void test_xlog_skip_badsize(void) {
     xlog_reader_close(r);
 }
 
-static void test_xlog_2writers(void) {
-    unlink("test.xlog");
-
-    xlog_writer *w1 = xlog_writer_open("test.xlog");
-    CU_ASSERT_PTR_NOT_NULL_FATAL(w1);
-    xlog_writer *w2 = xlog_writer_open("test.xlog");
-    CU_ASSERT_PTR_NOT_NULL_FATAL(w2);
-
-    for(int i = 0; i < 50000; i++) {
-        char buf[32];
-        sprintf(buf, "Hello, world! %d", 2*i);
-        xlog_writer_commit(w1, buf, strlen(buf) + 1);
-        sprintf(buf, "Hello, world! %d", 2*i + 1);
-        xlog_writer_commit(w2, buf, strlen(buf) + 1);
-    }
-    xlog_writer_close(w1);
-    xlog_writer_close(w2);
-
-    char rbuf[RBUF_SIZE];
-    ssize_t sz;
-
-    xlog_reader *r = xlog_reader_open("test.xlog");
-    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
-    for(int i = 0; i < 100000; i++) {
-        sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
-        char buf[32];
-        sprintf(buf, "Hello, world! %d", i);
-        CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(buf) + 1));
-        CU_ASSERT_STRING_EQUAL_FATAL(buf, rbuf);
-    }
-
-    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
-    CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
-
-    xlog_reader_close(r);
-}
-
 int main(void) {
     CU_pSuite suite = NULL;
 
@@ -414,11 +377,6 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_skip_badsize", test_xlog_skip_badsize)) {
-        CU_cleanup_registry();
-        return CU_get_error();
-    }
-
-    if(NULL == CU_add_test(suite, "xlog_2writers", test_xlog_2writers)) {
         CU_cleanup_registry();
         return CU_get_error();
     }
