@@ -32,8 +32,8 @@ static ssize_t xlog_readall(int fd, void *buf, size_t n) {
     return p - (uint8_t *)buf;
 }
 
-xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags) {
-    xlog_writer_t *w = malloc(sizeof(xlog_writer_t));
+xlog_writer *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags) {
+    xlog_writer *w = malloc(sizeof(xlog_writer));
     if(!w) return NULL;
 
     w->fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
@@ -47,11 +47,11 @@ xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size, i
     return w;
 }
 
-xlog_writer_t *xlog_writer_open(const char *path) {
+xlog_writer *xlog_writer_open(const char *path) {
     return xlog_writer_open_ex(path, UINT32_MAX, 0);
 }
 
-int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz) {
+int xlog_writer_commit(xlog_writer *w, const void *buf, size_t sz) {
     if(sz == 0 || sz > w->max_record_size) return XLOG_ERR_SIZE;
 
     uint8_t hdr[XLOG_HEADER_SIZE];
@@ -73,13 +73,13 @@ int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz) {
     return 0;
 }
 
-void xlog_writer_close(xlog_writer_t *w) {
+void xlog_writer_close(xlog_writer *w) {
     close(w->fd);
     free(w);
 }
 
-xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags) {
-    xlog_reader_t *r = malloc(sizeof(xlog_reader_t));
+xlog_reader *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags) {
+    xlog_reader *r = malloc(sizeof(xlog_reader));
     if(!r) return NULL;
 
     r->fd = open(path, O_RDONLY);
@@ -93,15 +93,15 @@ xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size, i
     return r;
 }
 
-xlog_reader_t *xlog_reader_open(const char *path) {
+xlog_reader *xlog_reader_open(const char *path) {
     return xlog_reader_open_ex(path, UINT32_MAX, 0);
 }
 
-void xlog_reader_reset(xlog_reader_t *r) {
+void xlog_reader_reset(xlog_reader *r) {
     lseek(r->fd, 0, SEEK_SET);
 }
 
-static ssize_t xlog_read_record(xlog_reader_t *r, void **buf) {
+static ssize_t xlog_read_record(xlog_reader *r, void **buf) {
     uint8_t hdr[XLOG_HEADER_SIZE];
     if(xlog_readall(r->fd, hdr, XLOG_HEADER_SIZE) != XLOG_HEADER_SIZE)
         return XLOG_EOF;
@@ -129,7 +129,7 @@ static ssize_t xlog_read_record(xlog_reader_t *r, void **buf) {
     return size;
 }
 
-ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
+ssize_t xlog_reader_next(xlog_reader *r, void **buf) {
     int scanning = 0;
 
     for(;;) {
@@ -153,7 +153,7 @@ ssize_t xlog_reader_next(xlog_reader_t *r, void **buf) {
     }
 }
 
-void xlog_reader_close(xlog_reader_t *r) {
+void xlog_reader_close(xlog_reader *r) {
     close(r->fd);
     free(r);
 }

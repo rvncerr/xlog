@@ -19,19 +19,19 @@
 extern "C" {
 #endif
 
-typedef struct xlog_reader xlog_reader_t;
-typedef struct xlog_writer xlog_writer_t;
+typedef struct xlog_reader xlog_reader;
+typedef struct xlog_writer xlog_writer;
 
-xlog_reader_t *xlog_reader_open(const char *path);
-xlog_reader_t *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags);
-void xlog_reader_reset(xlog_reader_t *r);
-ssize_t xlog_reader_next(xlog_reader_t *r, void **buf);
-void xlog_reader_close(xlog_reader_t *r);
+xlog_reader *xlog_reader_open(const char *path);
+xlog_reader *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags);
+void xlog_reader_reset(xlog_reader *r);
+ssize_t xlog_reader_next(xlog_reader *r, void **buf);
+void xlog_reader_close(xlog_reader *r);
 
-xlog_writer_t *xlog_writer_open(const char *path);
-xlog_writer_t *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags);
-int xlog_writer_commit(xlog_writer_t *w, const void *buf, size_t sz);
-void xlog_writer_close(xlog_writer_t *w);
+xlog_writer *xlog_writer_open(const char *path);
+xlog_writer *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags);
+int xlog_writer_commit(xlog_writer *w, const void *buf, size_t sz);
+void xlog_writer_close(xlog_writer *w);
 
 #ifdef __cplusplus
 }

@@ -16,12 +16,12 @@ Binary append-only log library in C with CRC32C integrity checks and C++ binding
 #include "xlog.h"
 
 /* Write */
-xlog_writer_t *w = xlog_writer_open("my.xlog");
+xlog_writer *w = xlog_writer_open("my.xlog");
 xlog_writer_commit(w, data, len);
 xlog_writer_close(w);
 
 /* Read */
-xlog_reader_t *r = xlog_reader_open("my.xlog");
+xlog_reader *r = xlog_reader_open("my.xlog");
 void *buf;
 ssize_t sz;
 while ((sz = xlog_reader_next(r, &buf)) > 0) {

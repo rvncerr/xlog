@@ -52,13 +52,13 @@ static void test_xlog_basic(void) {
                 "occaecat cupidatat non proident, sunt in culpa qui officia "
                 "deserunt mollit anim id est laborum.";
 
-    xlog_writer_t *w = xlog_writer_open("test.xlog");
+    xlog_writer *w = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, wbuf, strlen(wbuf) + 1), 0);
     xlog_writer_close(w);
 
     char *rbuf;
-    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     ssize_t sz = xlog_reader_next(r, (void **)&rbuf);
     CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(rbuf) + 1));
@@ -70,7 +70,7 @@ static void test_xlog_basic(void) {
 static void test_xlog_multi(void) {
     unlink("test.xlog");
 
-    xlog_writer_t *w = xlog_writer_open("test.xlog");
+    xlog_writer *w = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
     for(int i = 0; i < 1000; i++) {
         char buf[32];
@@ -82,7 +82,7 @@ static void test_xlog_multi(void) {
     char *rbuf;
     ssize_t sz;
 
-    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     for(int i = 0; i < 1000; i++) {
         sz = xlog_reader_next(r, (void **)&rbuf);
@@ -116,19 +116,19 @@ static void test_xlog_multi(void) {
 static void test_xlog_reopen_append(void) {
     unlink("test.xlog");
 
-    xlog_writer_t *w1 = xlog_writer_open("test.xlog");
+    xlog_writer *w1 = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w1);
     CU_ASSERT_EQUAL(xlog_writer_commit(w1, "first", 6), 0);
     xlog_writer_close(w1);
 
-    xlog_writer_t *w2 = xlog_writer_open("test.xlog");
+    xlog_writer *w2 = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w2);
     CU_ASSERT_EQUAL(xlog_writer_commit(w2, "second", 7), 0);
     xlog_writer_close(w2);
 
     char *rbuf;
     ssize_t sz;
-    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
 
     sz = xlog_reader_next(r, (void **)&rbuf);
@@ -150,7 +150,7 @@ static void test_xlog_reopen_append(void) {
 static void test_xlog_max_record_size(void) {
     unlink("test.xlog");
 
-    xlog_writer_t *w = xlog_writer_open_ex("test.xlog", 8, XLOG_NOSYNC);
+    xlog_writer *w = xlog_writer_open_ex("test.xlog", 8, XLOG_NOSYNC);
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
 
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "short", 6), 0);
@@ -160,7 +160,7 @@ static void test_xlog_max_record_size(void) {
 
     char *rbuf;
     ssize_t sz;
-    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
 
     sz = xlog_reader_next(r, (void **)&rbuf);
@@ -190,7 +190,7 @@ static void test_xlog_errors(void) {
     unlink("test.xlog");
 
     /* Writer: zero-size commit returns XLOG_ERR_SIZE */
-    xlog_writer_t *w = xlog_writer_open("test.xlog");
+    xlog_writer *w = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "data", 0), XLOG_ERR_SIZE);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "hello", 6), 0);
@@ -205,7 +205,7 @@ static void test_xlog_errors(void) {
     fclose(f);
 
     char *rbuf;
-    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     ssize_t sz = xlog_reader_next(r, (void **)&rbuf);
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_CRC);
@@ -242,7 +242,7 @@ static void test_xlog_errors(void) {
 static void test_xlog_skip_corrupt(void) {
     unlink("test.xlog");
 
-    xlog_writer_t *w = xlog_writer_open("test.xlog");
+    xlog_writer *w = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "aaa", 4), 0);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "bbb", 4), 0);
@@ -261,7 +261,7 @@ static void test_xlog_skip_corrupt(void) {
     /* Without XLOG_SKIP_CORRUPT: stops at corrupt record */
     char *rbuf;
     ssize_t sz;
-    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     sz = xlog_reader_next(r, (void **)&rbuf);
     CU_ASSERT_EQUAL_FATAL(sz, 4);
@@ -291,7 +291,7 @@ static void test_xlog_skip_badsize(void) {
     unlink("test.xlog");
 
     /* Write: [aaa] [bbb] [ccc] */
-    xlog_writer_t *w = xlog_writer_open("test.xlog");
+    xlog_writer *w = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "aaa", 4), 0);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "bbb", 4), 0);
@@ -309,7 +309,7 @@ static void test_xlog_skip_badsize(void) {
     /* Without flag: stops at bad size */
     char *rbuf;
     ssize_t sz;
-    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     sz = xlog_reader_next(r, (void **)&rbuf);
     CU_ASSERT_EQUAL_FATAL(sz, 4);
@@ -338,9 +338,9 @@ static void test_xlog_skip_badsize(void) {
 static void test_xlog_2writers(void) {
     unlink("test.xlog");
 
-    xlog_writer_t *w1 = xlog_writer_open("test.xlog");
+    xlog_writer *w1 = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w1);
-    xlog_writer_t *w2 = xlog_writer_open("test.xlog");
+    xlog_writer *w2 = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w2);
 
     for(int i = 0; i < 50000; i++) {
@@ -356,7 +356,7 @@ static void test_xlog_2writers(void) {
     char *rbuf;
     ssize_t sz;
 
-    xlog_reader_t *r = xlog_reader_open("test.xlog");
+    xlog_reader *r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     for(int i = 0; i < 100000; i++) {
         sz = xlog_reader_next(r, (void **)&rbuf);

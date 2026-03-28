@@ -57,7 +57,7 @@ public:
     void commit(const T &val) { commit(&val, sizeof(T)); }
 
 private:
-    xlog_writer_t *w_;
+    xlog_writer *w_;
 };
 
 class reader {
@@ -101,7 +101,7 @@ public:
     }
 
 private:
-    xlog_reader_t *r_;
+    xlog_reader *r_;
 };
 
 } // namespace xlog

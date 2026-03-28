@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    xlog_reader_t *r = xlog_reader_open(argv[1]);
+    xlog_reader *r = xlog_reader_open(argv[1]);
     if(!r) {
         fprintf(stderr, "Failed to open xlog file: %s\n", argv[1]);
         return EXIT_FAILURE;
