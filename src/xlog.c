@@ -159,3 +159,14 @@ void xlog_reader_close(xlog_reader *r) {
     close(r->fd);
     free(r);
 }
+
+const char *xlog_strerror(int code) {
+    switch(code) {
+    case XLOG_EOF:      return "end of log";
+    case XLOG_ERR_IO:   return "I/O error";
+    case XLOG_ERR_CRC:  return "checksum mismatch";
+    case XLOG_ERR_SIZE: return "invalid record size";
+    case XLOG_ERR_MEM:  return "out of memory";
+    default:            return "unknown error";
+    }
+}

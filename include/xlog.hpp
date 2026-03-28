@@ -17,13 +17,7 @@ private:
 };
 
 [[noreturn]] inline void throw_error(int code) {
-    switch(code) {
-    case XLOG_ERR_IO:   throw error(code, "xlog: I/O error");
-    case XLOG_ERR_CRC:  throw error(code, "xlog: checksum mismatch");
-    case XLOG_ERR_SIZE: throw error(code, "xlog: record size invalid");
-    case XLOG_ERR_MEM:  throw error(code, "xlog: out of memory");
-    default:            throw error(code, "xlog: unknown error");
-    }
+    throw error(code, xlog_strerror(code));
 }
 
 class writer {

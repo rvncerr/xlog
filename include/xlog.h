@@ -39,6 +39,8 @@ XLOG_API xlog_writer *xlog_writer_open_ex(const char *path, uint32_t max_record_
 XLOG_API int xlog_writer_commit(xlog_writer *w, const void *buf, size_t sz);
 XLOG_API void xlog_writer_close(xlog_writer *w);
 
+XLOG_API const char *xlog_strerror(int code);
+
 #ifdef __cplusplus
 }
 #endif
