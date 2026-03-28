@@ -74,6 +74,7 @@ int xlog_writer_commit(xlog_writer *w, const void *buf, size_t sz) {
 }
 
 void xlog_writer_close(xlog_writer *w) {
+    if(!w) return;
     close(w->fd);
     free(w);
 }
@@ -154,6 +155,7 @@ ssize_t xlog_reader_next(xlog_reader *r, void **buf) {
 }
 
 void xlog_reader_close(xlog_reader *r) {
+    if(!r) return;
     close(r->fd);
     free(r);
 }
