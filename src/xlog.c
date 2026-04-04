@@ -172,7 +172,6 @@ const char *xlog_strerror(int code) {
     case XLOG_ERR_IO:   return "I/O error";
     case XLOG_ERR_CRC:  return "checksum mismatch";
     case XLOG_ERR_SIZE: return "invalid record size";
-    case XLOG_ERR_MEM:  return "out of memory";
     case XLOG_ERR_SYNC: return "sync failed, data written but not durable";
     default:            return "unknown error";
     }
