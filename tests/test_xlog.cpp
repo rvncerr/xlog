@@ -15,15 +15,15 @@ static void test_basic() {
 
     {
         xlog::reader r("test_cpp.xlog");
-        auto rec1 = r.next();
+        auto rec1 = r.next(4096);
         assert(rec1.size() == 6);
         assert(memcmp(rec1.data(), "hello", 6) == 0);
 
-        auto rec2 = r.next();
+        auto rec2 = r.next(4096);
         assert(rec2.size() == 6);
         assert(memcmp(rec2.data(), "world", 6) == 0);
 
-        auto eof = r.next();
+        auto eof = r.next(4096);
         assert(eof.empty());
     }
 
@@ -43,12 +43,12 @@ static void test_struct() {
 
     {
         xlog::reader r("test_cpp.xlog");
-        auto rec = r.next();
+        auto rec = r.next(4096);
         assert(rec.size() == sizeof(record));
         auto *p = reinterpret_cast<const record *>(rec.data());
         assert(p->x == 10 && p->y == 20);
 
-        rec = r.next();
+        rec = r.next(4096);
         p = reinterpret_cast<const record *>(rec.data());
         assert(p->x == 30 && p->y == 40);
     }
@@ -81,7 +81,7 @@ static void test_move() {
 
     xlog::reader r1("test_cpp.xlog");
     xlog::reader r2 = std::move(r1);
-    auto rec = r2.next();
+    auto rec = r2.next(4096);
     assert(rec.size() == 6);
     assert(memcmp(rec.data(), "moved", 6) == 0);
 
