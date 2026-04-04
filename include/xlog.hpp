@@ -41,6 +41,15 @@ public:
         return *this;
     }
 
+    // Explicit close — throws on error (e.g. XLOG_ERR_IO).
+    // Call before destruction to detect sync/close failures.
+    void close() {
+        if(!w_) return;
+        int rc = xlog_writer_close(w_);
+        w_ = nullptr;
+        if(rc < 0) throw_error(rc);
+    }
+
     void commit(const void *buf, size_t sz) {
         int rc = xlog_writer_commit(w_, buf, sz);
         if(rc < 0) throw_error(rc);
