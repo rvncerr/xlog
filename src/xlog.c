@@ -22,13 +22,14 @@ struct xlog_reader {
     int flags;
 };
 
+/* Returns n on success, 0..n-1 on EOF, -1 on I/O error (errno preserved). */
 static ssize_t xlog_readall(int fd, void *buf, size_t n) {
     uint8_t *p = buf;
     while(n > 0) {
         ssize_t r = read(fd, p, n);
         if(r < 0) {
             if(errno == EINTR) continue;
-            return p - (uint8_t *)buf;
+            return -1;
         }
         if(r == 0) return p - (uint8_t *)buf;
         p += r;
@@ -115,8 +116,9 @@ int xlog_reader_reset(xlog_reader *r) {
 
 static ssize_t xlog_decode(xlog_reader *r, void *buf, size_t cap) {
     uint8_t hdr[XLOG_HEADER_SIZE];
-    if(xlog_readall(r->fd, hdr, XLOG_HEADER_SIZE) != XLOG_HEADER_SIZE)
-        return XLOG_EOF;
+    ssize_t rd = xlog_readall(r->fd, hdr, XLOG_HEADER_SIZE);
+    if(rd < 0) return XLOG_ERR_IO;
+    if(rd != XLOG_HEADER_SIZE) return XLOG_EOF;
 
     uint32_t size = get_le32(hdr);
     uint32_t checksum = get_le32(hdr + 4);
@@ -127,7 +129,8 @@ static ssize_t xlog_decode(xlog_reader *r, void *buf, size_t cap) {
     if(size > cap)
         return XLOG_ERR_SIZE;
 
-    if(xlog_readall(r->fd, buf, size) != (ssize_t)size)
+    rd = xlog_readall(r->fd, buf, size);
+    if(rd < 0 || rd != (ssize_t)size)
         return XLOG_ERR_IO;
 
     if(checksum != crc32c(0, buf, size))
