@@ -95,7 +95,7 @@ public:
         return sz;
     }
 
-    std::vector<uint8_t> next(size_t cap = 65536) {
+    std::vector<uint8_t> next(size_t cap) {
         std::vector<uint8_t> buf(cap);
         ssize_t sz = xlog_reader_next(r_, buf.data(), buf.size());
         if(sz < 0) throw_error((int)sz);
