@@ -31,13 +31,13 @@ public:
         if(!w_) throw error(XLOG_ERR_IO, "xlog: failed to open writer");
     }
 
-    ~writer() { if(w_) xlog_writer_close(w_); }
+    ~writer() { if(w_) (void)xlog_writer_close(w_); }
 
     writer(const writer &) = delete;
     writer &operator=(const writer &) = delete;
     writer(writer &&o) noexcept : w_(o.w_) { o.w_ = nullptr; }
     writer &operator=(writer &&o) noexcept {
-        if(this != &o) { if(w_) xlog_writer_close(w_); w_ = o.w_; o.w_ = nullptr; }
+        if(this != &o) { if(w_) (void)xlog_writer_close(w_); w_ = o.w_; o.w_ = nullptr; }
         return *this;
     }
 
@@ -84,7 +84,10 @@ public:
         return *this;
     }
 
-    void reset() { xlog_reader_reset(r_); }
+    void reset() {
+        int rc = xlog_reader_reset(r_);
+        if(rc < 0) throw_error(rc);
+    }
 
     ssize_t next(void *buf, size_t cap) {
         ssize_t sz = xlog_reader_next(r_, buf, cap);
