@@ -57,7 +57,7 @@ static void test_xlog_basic(void) {
     xlog_writer *w = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, wbuf, strlen(wbuf) + 1), 0);
-    xlog_writer_close(w);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
 
     char rbuf[RBUF_SIZE];
     xlog_reader *r = xlog_reader_open("test.xlog");
@@ -78,7 +78,7 @@ static void test_xlog_multi(void) {
         sprintf(buf, "Hello, world! %d", i);
         CU_ASSERT_EQUAL(xlog_writer_commit(w, buf, strlen(buf) + 1), 0);
     }
-    xlog_writer_close(w);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
 
     char rbuf[RBUF_SIZE];
     ssize_t sz;
@@ -96,7 +96,7 @@ static void test_xlog_multi(void) {
     sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
 
-    xlog_reader_reset(r);
+    CU_ASSERT_EQUAL(xlog_reader_reset(r), 0);
 
     for(int i = 0; i < 1000; i++) {
         sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
@@ -118,12 +118,12 @@ static void test_xlog_reopen_append(void) {
     xlog_writer *w1 = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w1);
     CU_ASSERT_EQUAL(xlog_writer_commit(w1, "first", 6), 0);
-    xlog_writer_close(w1);
+    CU_ASSERT_EQUAL(xlog_writer_close(w1), 0);
 
     xlog_writer *w2 = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w2);
     CU_ASSERT_EQUAL(xlog_writer_commit(w2, "second", 7), 0);
-    xlog_writer_close(w2);
+    CU_ASSERT_EQUAL(xlog_writer_close(w2), 0);
 
     char rbuf[RBUF_SIZE];
     ssize_t sz;
@@ -153,7 +153,7 @@ static void test_xlog_max_record_size(void) {
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "short", 6), 0);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "this is too long", 17), XLOG_ERR_SIZE);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "ok", 3), 0);
-    xlog_writer_close(w);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
 
     char rbuf[RBUF_SIZE];
     ssize_t sz;
@@ -189,7 +189,7 @@ static void test_xlog_errors(void) {
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "data", 0), XLOG_ERR_SIZE);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "hello", 6), 0);
-    xlog_writer_close(w);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
 
     /* Reader: corrupt checksum returns XLOG_ERR_CRC */
     FILE *f = fopen("test.xlog", "r+b");
@@ -242,7 +242,7 @@ static void test_xlog_skip_corrupt(void) {
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "aaa", 4), 0);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "bbb", 4), 0);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "ccc", 4), 0);
-    xlog_writer_close(w);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
 
     /* Corrupt the payload of the second record */
     int fd = open("test.xlog", O_RDWR);
@@ -288,7 +288,7 @@ static void test_xlog_skip_badsize(void) {
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "aaa", 4), 0);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "bbb", 4), 0);
     CU_ASSERT_EQUAL(xlog_writer_commit(w, "ccc", 4), 0);
-    xlog_writer_close(w);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
 
     /* Corrupt the size field of the second record (offset 12) */
     int fd = open("test.xlog", O_RDWR);
