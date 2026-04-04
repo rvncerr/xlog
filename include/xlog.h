@@ -9,8 +9,7 @@
 #define XLOG_ERR_IO   -1
 #define XLOG_ERR_CRC  -2
 #define XLOG_ERR_SIZE -3
-#define XLOG_ERR_MEM  -4
-#define XLOG_ERR_SYNC -5
+#define XLOG_ERR_SYNC -4
 
 #define XLOG_NOSYNC       (1 << 0)
 #define XLOG_SKIP_CORRUPT (1 << 1)
