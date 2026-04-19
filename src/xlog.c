@@ -77,7 +77,11 @@ int xlog_writer_commit(xlog_writer *w, const void *buf, size_t sz) {
         return XLOG_ERR_IO;
 
     if(!(w->flags & XLOG_NOSYNC)) {
+#ifdef __APPLE__
+        if(fcntl(w->fd, F_FULLFSYNC) < 0)
+#else
         if(fdatasync(w->fd) < 0)
+#endif
             return XLOG_ERR_SYNC;
     }
 
