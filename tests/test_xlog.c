@@ -324,6 +324,33 @@ static void test_xlog_skip_badsize(void) {
     xlog_reader_close(r);
 }
 
+static void test_xlog_cloexec(void) {
+    unlink("test.xlog");
+
+    /* open() returns the lowest free fd; find it beforehand via dup(). */
+    int expect = dup(0);
+    CU_ASSERT_FATAL(expect >= 0);
+    close(expect);
+
+    xlog_writer *w = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    int fl = fcntl(expect, F_GETFD);
+    CU_ASSERT_FATAL(fl >= 0);
+    CU_ASSERT(fl & FD_CLOEXEC);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+
+    expect = dup(0);
+    CU_ASSERT_FATAL(expect >= 0);
+    close(expect);
+
+    xlog_reader *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    fl = fcntl(expect, F_GETFD);
+    CU_ASSERT_FATAL(fl >= 0);
+    CU_ASSERT(fl & FD_CLOEXEC);
+    xlog_reader_close(r);
+}
+
 static void test_xlog_toobig(void) {
     unlink("test.xlog");
 
@@ -478,6 +505,11 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_toobig", test_xlog_toobig)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_cloexec", test_xlog_cloexec)) {
         CU_cleanup_registry();
         return CU_get_error();
     }

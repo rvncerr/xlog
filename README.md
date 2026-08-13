@@ -8,7 +8,7 @@ Binary append-only log library in C with CRC32C integrity checks and C++ binding
 - Little-endian on-disk format, portable across architectures
 - Configurable max record size to guard against corruption
 - Negative return codes for error reporting (`XLOG_ERR_IO`, `XLOG_ERR_CRC`, etc.)
-- POSIX only (Linux, macOS, FreeBSD, etc.) — requires `writev`, `fdatasync`, `O_APPEND`
+- POSIX only (Linux, macOS, FreeBSD, etc.) — requires `writev`, `fdatasync`, `O_APPEND`, `O_CLOEXEC`
 
 ## Usage (C)
 

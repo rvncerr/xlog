@@ -42,7 +42,7 @@ xlog_writer *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int
     xlog_writer *w = malloc(sizeof(xlog_writer));
     if(!w) return NULL;
 
-    w->fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    w->fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
     if(w->fd < 0) {
         free(w);
         return NULL;
@@ -99,7 +99,7 @@ xlog_reader *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int
     xlog_reader *r = malloc(sizeof(xlog_reader));
     if(!r) return NULL;
 
-    r->fd = open(path, O_RDONLY);
+    r->fd = open(path, O_RDONLY | O_CLOEXEC);
     if(r->fd < 0) {
         free(r);
         return NULL;
