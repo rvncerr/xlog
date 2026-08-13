@@ -5,11 +5,13 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-#define XLOG_EOF       0
-#define XLOG_ERR_IO   -1
-#define XLOG_ERR_CRC  -2
-#define XLOG_ERR_SIZE -3
-#define XLOG_ERR_SYNC -4
+#define XLOG_EOF         0
+#define XLOG_ERR_IO     -1
+#define XLOG_ERR_CRC    -2
+#define XLOG_ERR_SIZE   -3  /* size field is zero or exceeds max_record_size */
+#define XLOG_ERR_SYNC   -4
+#define XLOG_ERR_TOOBIG -5  /* record exceeds caller's buffer; reader stays on
+                               the record, retry with a larger buffer */
 
 #define XLOG_NOSYNC       (1 << 0)
 #define XLOG_SKIP_CORRUPT (1 << 1)

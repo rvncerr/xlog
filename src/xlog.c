@@ -136,8 +136,10 @@ static ssize_t xlog_decode(xlog_reader *r, void *buf, size_t cap, off_t pos) {
     if(size == 0 || size > r->max_record_size)
         return XLOG_ERR_SIZE;
 
-    if(size > cap)
-        return XLOG_ERR_SIZE;
+    if(size > cap) {
+        if(lseek(r->fd, pos, SEEK_SET) < 0) return XLOG_ERR_IO;
+        return XLOG_ERR_TOOBIG;
+    }
 
     rd = xlog_readall(r->fd, buf, size);
     if(rd < 0) return XLOG_ERR_IO;
@@ -166,6 +168,13 @@ ssize_t xlog_reader_next(xlog_reader *r, void *buf, size_t cap) {
         if(rc == XLOG_ERR_CRC && !scanning && (r->flags & XLOG_SKIP_CORRUPT))
             continue;
 
+        /* A valid record that merely exceeds the caller's buffer must never
+           be skip-scanned away. During a scan, though, candidate sizes are
+           untrusted, so an unverifiable oversized candidate is stepped over
+           below like any other non-record. */
+        if(rc == XLOG_ERR_TOOBIG && !scanning)
+            return rc;
+
         if(r->flags & XLOG_SKIP_BADSIZE) {
             scanning = 1;
             if(lseek(r->fd, pos + 1, SEEK_SET) < 0) return XLOG_ERR_IO;
@@ -189,6 +198,7 @@ const char *xlog_strerror(int code) {
     case XLOG_ERR_CRC:  return "checksum mismatch";
     case XLOG_ERR_SIZE: return "invalid record size";
     case XLOG_ERR_SYNC: return "sync failed, data written but not durable";
+    case XLOG_ERR_TOOBIG: return "record larger than caller buffer";
     default:            return "unknown error";
     }
 }

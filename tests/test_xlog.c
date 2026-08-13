@@ -324,6 +324,50 @@ static void test_xlog_skip_badsize(void) {
     xlog_reader_close(r);
 }
 
+static void test_xlog_toobig(void) {
+    unlink("test.xlog");
+
+    char big[100];
+    memset(big, 'A', sizeof(big));
+    big[99] = '\0';
+
+    xlog_writer *w = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, big, sizeof(big)), 0);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "next", 5), 0);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+
+    /* Small buffer: XLOG_ERR_TOOBIG, reader stays on the record. */
+    char tiny[10];
+    char rbuf[RBUF_SIZE];
+    ssize_t sz;
+    xlog_reader *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, tiny, sizeof(tiny));
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_TOOBIG);
+
+    /* Retry with a large enough buffer returns the same record. */
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, 100);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, big);
+    xlog_reader_close(r);
+
+    /* XLOG_SKIP_BADSIZE must not skip a valid oversized record. */
+    r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_BADSIZE);
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, tiny, sizeof(tiny));
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_TOOBIG);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, 100);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, big);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, 5);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "next");
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
+    xlog_reader_close(r);
+}
+
 static void test_xlog_tail_partial(void) {
     unlink("test.xlog");
 
@@ -429,6 +473,11 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_tail_partial", test_xlog_tail_partial)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_toobig", test_xlog_toobig)) {
         CU_cleanup_registry();
         return CU_get_error();
     }
