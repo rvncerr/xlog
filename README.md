@@ -43,10 +43,10 @@ xlog_reader_close(r);
     w.commit(my_struct);  // any POD type
 }
 
-/* Read — returns std::vector<uint8_t>, throws on error */
+/* Read — returns std::vector<uint8_t> (empty at EOF), throws on error */
 {
     xlog::reader r("my.xlog");
-    for (auto rec = r.next(); !rec.empty(); rec = r.next()) {
+    for (auto rec = r.next(4096); !rec.empty(); rec = r.next(4096)) {
         /* process rec.data() / rec.size() */
     }
 }
