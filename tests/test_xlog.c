@@ -182,6 +182,58 @@ static void test_xlog_max_record_size(void) {
     xlog_reader_close(r);
 }
 
+static void test_xlog_size_cap(void) {
+    unlink("test.xlog");
+
+    /* open_ex rejects an out-of-range max_record_size instead of silently
+       clamping it: zero, and anything above the cap. */
+    errno = 0;
+    CU_ASSERT_PTR_NULL(xlog_writer_open_ex("test.xlog", 0, 0));
+    CU_ASSERT_EQUAL(errno, EINVAL);
+    errno = 0;
+    CU_ASSERT_PTR_NULL(xlog_writer_open_ex("test.xlog", XLOG_MAX_RECORD_SIZE + 1, 0));
+    CU_ASSERT_EQUAL(errno, EINVAL);
+    errno = 0;
+    CU_ASSERT_PTR_NULL(xlog_writer_open_ex("test.xlog", UINT32_MAX, 0));
+    CU_ASSERT_EQUAL(errno, EINVAL);
+    errno = 0;
+    CU_ASSERT_PTR_NULL(xlog_reader_open_ex("test.xlog", 0, 0));
+    CU_ASSERT_EQUAL(errno, EINVAL);
+    errno = 0;
+    CU_ASSERT_PTR_NULL(xlog_reader_open_ex("test.xlog", UINT32_MAX, 0));
+    CU_ASSERT_EQUAL(errno, EINVAL);
+
+    /* A rejected open must not have created the file. */
+    CU_ASSERT_EQUAL(access("test.xlog", F_OK), -1);
+
+    /* Writer: sz above XLOG_MAX_RECORD_SIZE is rejected up front, even with
+       the default max_record_size. Checked before the buffer is touched. */
+    xlog_writer *w = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    char dummy = 0;
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, &dummy, (size_t)XLOG_MAX_RECORD_SIZE + 1), XLOG_ERR_SIZE);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "ok", 3), 0);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+
+    /* Reader: a header claiming a size above the cap is invalid
+       (XLOG_ERR_SIZE), not merely too big for the buffer. */
+    int fd = open("test.xlog", O_WRONLY | O_APPEND);
+    CU_ASSERT_FATAL(fd >= 0);
+    uint8_t hdr[8] = { 0xf9, 0xff, 0xfe, 0x7f, 0, 0, 0, 0 }; /* cap + 1 */
+    CU_ASSERT_EQUAL_FATAL(write(fd, hdr, 8), 8);
+    close(fd);
+
+    char rbuf[RBUF_SIZE];
+    xlog_reader *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    ssize_t sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, 3);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "ok");
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_SIZE);
+    xlog_reader_close(r);
+}
+
 static void test_xlog_errors(void) {
     unlink("test.xlog");
 
@@ -237,7 +289,7 @@ static void test_xlog_errors(void) {
     xlog_reader_close(r);
 
     /* A torn tail is not scanned past even with XLOG_SKIP_BADSIZE */
-    r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_BADSIZE);
+    r = xlog_reader_open_ex("test.xlog", XLOG_MAX_RECORD_SIZE, XLOG_SKIP_BADSIZE);
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_TRUNCATED);
@@ -276,7 +328,7 @@ static void test_xlog_skip_corrupt(void) {
     xlog_reader_close(r);
 
     /* With XLOG_SKIP_CORRUPT: skips corrupt, reads third record */
-    r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_CORRUPT);
+    r = xlog_reader_open_ex("test.xlog", XLOG_MAX_RECORD_SIZE, XLOG_SKIP_CORRUPT);
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 4);
@@ -321,7 +373,7 @@ static void test_xlog_skip_badsize(void) {
     xlog_reader_close(r);
 
     /* With XLOG_SKIP_BADSIZE: scans forward, finds third record */
-    r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_BADSIZE);
+    r = xlog_reader_open_ex("test.xlog", XLOG_MAX_RECORD_SIZE, XLOG_SKIP_BADSIZE);
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, 4);
@@ -390,7 +442,7 @@ static void test_xlog_toobig(void) {
     xlog_reader_close(r);
 
     /* XLOG_SKIP_BADSIZE must not skip a valid oversized record. */
-    r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_BADSIZE);
+    r = xlog_reader_open_ex("test.xlog", XLOG_MAX_RECORD_SIZE, XLOG_SKIP_BADSIZE);
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     sz = xlog_reader_next(r, tiny, sizeof(tiny));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_TOOBIG);
@@ -490,6 +542,11 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_max_record_size", test_xlog_max_record_size)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_size_cap", test_xlog_size_cap)) {
         CU_cleanup_registry();
         return CU_get_error();
     }

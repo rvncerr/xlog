@@ -1,6 +1,7 @@
 #ifndef XLOG_H
 #define XLOG_H
 
+#include <limits.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/types.h>
@@ -24,6 +25,17 @@
 #define XLOG_SKIP_CORRUPT (1 << 1)
 #define XLOG_SKIP_BADSIZE (1 << 2)
 
+/* On-disk record header: 4-byte little-endian payload size + 4-byte CRC32C. */
+#define XLOG_HEADER_SIZE 8
+
+/* Hard ceiling on record size; the _ex opens reject a larger
+   max_record_size. A commit must complete in one writev call, and Linux
+   transfers at most
+   INT_MAX & PAGE_MASK bytes per call — the mask here assumes 64 KiB pages,
+   the largest in common use. This also keeps header + payload within
+   ssize_t on 32-bit platforms (static assert in xlog.c). */
+#define XLOG_MAX_RECORD_SIZE ((INT_MAX & ~0xffffu) - XLOG_HEADER_SIZE)
+
 #ifdef XLOG_BUILDING
     #define XLOG_API __attribute__((visibility("default")))
 #else
@@ -45,7 +57,9 @@ extern "C" {
 typedef struct xlog_reader xlog_reader;
 typedef struct xlog_writer xlog_writer;
 
-/* Open functions return NULL on failure with errno set. */
+/* Open functions return NULL on failure with errno set. The _ex variants
+   set EINVAL if max_record_size is 0 or above XLOG_MAX_RECORD_SIZE; the
+   plain variants use XLOG_MAX_RECORD_SIZE. */
 XLOG_API xlog_reader *xlog_reader_open(const char *path) XLOG_NONNULL(1);
 XLOG_API xlog_reader *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags) XLOG_NONNULL(1);
 XLOG_API XLOG_NODISCARD int xlog_reader_reset(xlog_reader *r) XLOG_NONNULL(1);

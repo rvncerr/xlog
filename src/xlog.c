@@ -4,11 +4,17 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
-#define XLOG_HEADER_SIZE 8
+/* The header size literal is the on-disk format; these verify the code's
+   assumptions about it. */
+_Static_assert(XLOG_HEADER_SIZE == 2 * sizeof(uint32_t),
+               "header is a 32-bit size plus a 32-bit CRC32C");
+_Static_assert(XLOG_MAX_RECORD_SIZE + XLOG_HEADER_SIZE <= SSIZE_MAX,
+               "record cap must fit a single read/write");
 
 struct xlog_writer {
     int fd;
@@ -39,6 +45,11 @@ static ssize_t xlog_readall(int fd, void *buf, size_t n) {
 }
 
 xlog_writer *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags) {
+    if(max_record_size == 0 || max_record_size > XLOG_MAX_RECORD_SIZE) {
+        errno = EINVAL;
+        return NULL;
+    }
+
     xlog_writer *w = malloc(sizeof(xlog_writer));
     if(!w) return NULL;
 
@@ -54,7 +65,7 @@ xlog_writer *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int
 }
 
 xlog_writer *xlog_writer_open(const char *path) {
-    return xlog_writer_open_ex(path, UINT32_MAX, 0);
+    return xlog_writer_open_ex(path, XLOG_MAX_RECORD_SIZE, 0);
 }
 
 int xlog_writer_commit(xlog_writer *w, const void *buf, size_t sz) {
@@ -96,6 +107,11 @@ int xlog_writer_close(xlog_writer *w) {
 }
 
 xlog_reader *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int flags) {
+    if(max_record_size == 0 || max_record_size > XLOG_MAX_RECORD_SIZE) {
+        errno = EINVAL;
+        return NULL;
+    }
+
     xlog_reader *r = malloc(sizeof(xlog_reader));
     if(!r) return NULL;
 
@@ -111,7 +127,7 @@ xlog_reader *xlog_reader_open_ex(const char *path, uint32_t max_record_size, int
 }
 
 xlog_reader *xlog_reader_open(const char *path) {
-    return xlog_reader_open_ex(path, UINT32_MAX, 0);
+    return xlog_reader_open_ex(path, XLOG_MAX_RECORD_SIZE, 0);
 }
 
 int xlog_reader_reset(xlog_reader *r) {
