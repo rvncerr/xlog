@@ -1,5 +1,6 @@
 #include <CUnit/CUnit.h>
 #include <CUnit/Basic.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -216,7 +217,7 @@ static void test_xlog_errors(void) {
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
     xlog_reader_close(r);
 
-    /* Reader: truncated payload returns XLOG_ERR_IO */
+    /* Reader: truncated payload returns XLOG_ERR_TRUNCATED, errno untouched */
     unlink("test.xlog");
     uint8_t fake_header[8] = {
         100, 0, 0, 0,  /* size = 100 (little-endian) */
@@ -229,8 +230,17 @@ static void test_xlog_errors(void) {
     fclose(f);
     r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    errno = 0;
     sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
-    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_IO);
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_TRUNCATED);
+    CU_ASSERT_EQUAL(errno, 0);
+    xlog_reader_close(r);
+
+    /* A torn tail is not scanned past even with XLOG_SKIP_BADSIZE */
+    r = xlog_reader_open_ex("test.xlog", UINT32_MAX, XLOG_SKIP_BADSIZE);
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_TRUNCATED);
     xlog_reader_close(r);
 }
 
@@ -425,10 +435,10 @@ static void test_xlog_tail_partial(void) {
     sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
 
-    /* Complete the header, half the payload: error, but still rewound. */
+    /* Complete the header, half the payload: truncated, but still rewound. */
     CU_ASSERT_EQUAL_FATAL(write(fd, rec + 3, 7), 7);
     sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
-    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_IO);
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_TRUNCATED);
 
     /* Finish the record: the same reader now returns it intact. */
     CU_ASSERT_EQUAL_FATAL(write(fd, rec + 10, 2), 2);

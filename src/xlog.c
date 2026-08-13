@@ -145,7 +145,7 @@ static ssize_t xlog_decode(xlog_reader *r, void *buf, size_t cap, off_t pos) {
     if(rd < 0) return XLOG_ERR_IO;
     if(rd != (ssize_t)size) {
         (void)lseek(r->fd, pos, SEEK_SET);
-        return XLOG_ERR_IO;
+        return XLOG_ERR_TRUNCATED;
     }
 
     if(checksum != crc32c(0, buf, size))
@@ -175,6 +175,13 @@ ssize_t xlog_reader_next(xlog_reader *r, void *buf, size_t cap) {
         if(rc == XLOG_ERR_TOOBIG && !scanning)
             return rc;
 
+        /* Truncation means the file ends mid-record: there is nothing
+           beyond it to scan for. During a scan, though, a candidate whose
+           size runs past EOF is just a non-record; keep stepping in case a
+           real record starts closer to the end. */
+        if(rc == XLOG_ERR_TRUNCATED && !scanning)
+            return rc;
+
         if(r->flags & XLOG_SKIP_BADSIZE) {
             scanning = 1;
             if(lseek(r->fd, pos + 1, SEEK_SET) < 0) return XLOG_ERR_IO;
@@ -199,6 +206,7 @@ const char *xlog_strerror(int code) {
     case XLOG_ERR_SIZE: return "invalid record size";
     case XLOG_ERR_SYNC: return "sync failed, data written but not durable";
     case XLOG_ERR_TOOBIG: return "record larger than caller buffer";
+    case XLOG_ERR_TRUNCATED: return "record truncated at end of log";
     default:            return "unknown error";
     }
 }

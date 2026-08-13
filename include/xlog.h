@@ -5,13 +5,20 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-#define XLOG_EOF         0
-#define XLOG_ERR_IO     -1
-#define XLOG_ERR_CRC    -2
-#define XLOG_ERR_SIZE   -3  /* size field is zero or exceeds max_record_size */
-#define XLOG_ERR_SYNC   -4
-#define XLOG_ERR_TOOBIG -5  /* record exceeds caller's buffer; reader stays on
-                               the record, retry with a larger buffer */
+/* Negative return codes are errors; see xlog_strerror(). errno is meaningful
+   only after XLOG_ERR_IO or XLOG_ERR_SYNC (a failed system call), with one
+   exception: a short writev in xlog_writer_commit returns XLOG_ERR_IO with
+   errno unchanged. */
+#define XLOG_EOF            0
+#define XLOG_ERR_IO        -1
+#define XLOG_ERR_CRC       -2
+#define XLOG_ERR_SIZE      -3  /* size field is zero or exceeds max_record_size */
+#define XLOG_ERR_SYNC      -4
+#define XLOG_ERR_TOOBIG    -5  /* record exceeds caller's buffer; reader stays
+                                  on the record, retry with a larger buffer */
+#define XLOG_ERR_TRUNCATED -6  /* file ends mid-record (torn tail after a crash
+                                  or a writer still appending); reader stays on
+                                  the record */
 
 #define XLOG_NOSYNC       (1 << 0)
 #define XLOG_SKIP_CORRUPT (1 << 1)
