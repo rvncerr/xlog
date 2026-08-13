@@ -483,7 +483,14 @@ int main(void) {
     }
 
     CU_basic_set_mode(CU_BRM_VERBOSE);
-    CU_basic_run_tests();
+    if(CUE_SUCCESS != CU_basic_run_tests()) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    /* CU_get_error() is CUE_SUCCESS even when assertions fail; the exit
+       code must come from the failure count. */
+    unsigned int failures = CU_get_number_of_failures();
     CU_cleanup_registry();
-    return CU_get_error();
+    return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }
