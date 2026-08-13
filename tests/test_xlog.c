@@ -182,6 +182,17 @@ static void test_xlog_max_record_size(void) {
     xlog_reader_close(r);
 }
 
+static void test_xlog_sync_fallback(void) {
+    /* /dev/null accepts writes but does not implement F_FULLFSYNC (macOS
+       reports ENODEV); a durable commit must fall back to fsync instead of
+       failing with XLOG_ERR_SYNC. Elsewhere this just exercises fdatasync. */
+    xlog_writer *w = xlog_writer_open("/dev/null");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "sync", 5), 0);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "sync again", 11), 0);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+}
+
 static void test_xlog_size_cap(void) {
     unlink("test.xlog");
 
@@ -547,6 +558,11 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_size_cap", test_xlog_size_cap)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_sync_fallback", test_xlog_sync_fallback)) {
         CU_cleanup_registry();
         return CU_get_error();
     }

@@ -44,6 +44,22 @@ static ssize_t xlog_readall(int fd, void *buf, size_t n) {
     return p - (uint8_t *)buf;
 }
 
+/* Durable flush. On macOS fsync only hands data to the drive's write cache,
+   so F_FULLFSYNC is needed to force a media flush; volumes that do not
+   implement it (SMB, NFS, some virtual devices) report it as unsupported
+   and fall back to fsync. Real failures such as EIO propagate. */
+static int xlog_sync(int fd) {
+#ifdef __APPLE__
+    if(fcntl(fd, F_FULLFSYNC) == 0) return 0;
+    if(errno == ENOTSUP || errno == EOPNOTSUPP || errno == ENOTTY ||
+       errno == ENODEV || errno == EINVAL)
+        return fsync(fd);
+    return -1;
+#else
+    return fdatasync(fd);
+#endif
+}
+
 xlog_writer *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags) {
     if(max_record_size == 0 || max_record_size > XLOG_MAX_RECORD_SIZE) {
         errno = EINVAL;
@@ -88,11 +104,7 @@ int xlog_writer_commit(xlog_writer *w, const void *buf, size_t sz) {
         return XLOG_ERR_IO;
 
     if(!(w->flags & XLOG_NOSYNC)) {
-#ifdef __APPLE__
-        if(fcntl(w->fd, F_FULLFSYNC) < 0)
-#else
-        if(fdatasync(w->fd) < 0)
-#endif
+        if(xlog_sync(w->fd) < 0)
             return XLOG_ERR_SYNC;
     }
 
