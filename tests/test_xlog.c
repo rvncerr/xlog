@@ -324,6 +324,53 @@ static void test_xlog_skip_badsize(void) {
     xlog_reader_close(r);
 }
 
+static void test_xlog_tail_partial(void) {
+    unlink("test.xlog");
+
+    xlog_writer *w = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "aaa", 4), 0);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+
+    /* Raw bytes of a second record: 8-byte header + "bbb\0" payload. */
+    uint32_t crc = crc32c(0, "bbb", 4);
+    uint8_t rec[12] = { 4, 0, 0, 0,
+                        (uint8_t)crc, (uint8_t)(crc >> 8),
+                        (uint8_t)(crc >> 16), (uint8_t)(crc >> 24),
+                        'b', 'b', 'b', '\0' };
+
+    char rbuf[RBUF_SIZE];
+    ssize_t sz;
+    xlog_reader *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, 4);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "aaa");
+
+    /* Append half the header: reader reports EOF and must rewind. */
+    int fd = open("test.xlog", O_WRONLY | O_APPEND);
+    CU_ASSERT_FATAL(fd >= 0);
+    CU_ASSERT_EQUAL_FATAL(write(fd, rec, 3), 3);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
+
+    /* Complete the header, half the payload: error, but still rewound. */
+    CU_ASSERT_EQUAL_FATAL(write(fd, rec + 3, 7), 7);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_IO);
+
+    /* Finish the record: the same reader now returns it intact. */
+    CU_ASSERT_EQUAL_FATAL(write(fd, rec + 10, 2), 2);
+    close(fd);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, 4);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "bbb");
+
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, XLOG_EOF);
+    xlog_reader_close(r);
+}
+
 int main(void) {
     CU_pSuite suite = NULL;
 
@@ -377,6 +424,11 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_skip_badsize", test_xlog_skip_badsize)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_tail_partial", test_xlog_tail_partial)) {
         CU_cleanup_registry();
         return CU_get_error();
     }

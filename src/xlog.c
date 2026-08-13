@@ -118,11 +118,17 @@ int xlog_reader_reset(xlog_reader *r) {
     return lseek(r->fd, 0, SEEK_SET) < 0 ? XLOG_ERR_IO : 0;
 }
 
-static ssize_t xlog_decode(xlog_reader *r, void *buf, size_t cap) {
+/* pos is the offset of the record start, used to rewind on a short read at
+   EOF (torn tail or racing a writer) so the caller can retry after the
+   record is completed. */
+static ssize_t xlog_decode(xlog_reader *r, void *buf, size_t cap, off_t pos) {
     uint8_t hdr[XLOG_HEADER_SIZE];
     ssize_t rd = xlog_readall(r->fd, hdr, XLOG_HEADER_SIZE);
     if(rd < 0) return XLOG_ERR_IO;
-    if(rd != XLOG_HEADER_SIZE) return XLOG_EOF;
+    if(rd != XLOG_HEADER_SIZE) {
+        if(rd > 0 && lseek(r->fd, pos, SEEK_SET) < 0) return XLOG_ERR_IO;
+        return XLOG_EOF;
+    }
 
     uint32_t size = get_le32(hdr);
     uint32_t checksum = get_le32(hdr + 4);
@@ -134,8 +140,11 @@ static ssize_t xlog_decode(xlog_reader *r, void *buf, size_t cap) {
         return XLOG_ERR_SIZE;
 
     rd = xlog_readall(r->fd, buf, size);
-    if(rd < 0 || rd != (ssize_t)size)
+    if(rd < 0) return XLOG_ERR_IO;
+    if(rd != (ssize_t)size) {
+        (void)lseek(r->fd, pos, SEEK_SET);
         return XLOG_ERR_IO;
+    }
 
     if(checksum != crc32c(0, buf, size))
         return XLOG_ERR_CRC;
@@ -149,7 +158,7 @@ ssize_t xlog_reader_next(xlog_reader *r, void *buf, size_t cap) {
     for(;;) {
         off_t pos = lseek(r->fd, 0, SEEK_CUR);
         if(pos < 0) return XLOG_ERR_IO;
-        ssize_t rc = xlog_decode(r, buf, cap);
+        ssize_t rc = xlog_decode(r, buf, cap, pos);
 
         if(rc >= 0) { return rc; }
         if(rc == XLOG_EOF) { return XLOG_EOF; }
