@@ -16,7 +16,7 @@ conventional C (C11); C++ bindings are a thin header-only wrapper (`xlog.hpp`).
 
 ## Build
 
-Requires Conan 2.x and CMake ≥ 3.10.
+Requires CMake ≥ 3.10. Conan 2.x is needed only for the tests (CUnit).
 
 ```bash
 conan install . --output-folder=build --build=missing
@@ -26,12 +26,18 @@ cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake \
 cmake --build .
 ```
 
+The library alone needs no dependencies: `cmake -B build -DBUILD_TESTING=OFF`.
+
+Options: `BUILD_TESTING` (default ON at top level), `XLOG_WERROR` (default
+OFF), `XLOG_HW_CRC32C` (default ON — set OFF for binaries that must run on
+pre-SSE4.2 x86).
+
 ## Tests
 
-Run both test binaries after any change:
+Run both suites after any change, via ctest or directly:
 
 ```bash
-./build/test_xlog && ./build/test_xlog_cpp
+cd build && ctest --output-on-failure
 ```
 
 ## Style
