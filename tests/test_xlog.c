@@ -2,6 +2,7 @@
 #include <CUnit/Basic.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -180,6 +181,79 @@ static void test_xlog_max_record_size(void) {
     CU_ASSERT_EQUAL_FATAL(sz, XLOG_ERR_SIZE);
 
     xlog_reader_close(r);
+}
+
+static void test_xlog_create_paths(void) {
+    /* Creating a log syncs its parent directory, which means deriving the
+       directory from the path. Exercise each shape that derivation must
+       handle, plus the create/reopen split of the O_EXCL two-step open. */
+    char rbuf[RBUF_SIZE];
+    ssize_t sz;
+
+    /* Bare filename: parent is the working directory. */
+    unlink("test.xlog");
+    xlog_writer *w = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "created", 8), 0);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+
+    /* Reopening an existing log takes the EEXIST branch and still appends. */
+    w = xlog_writer_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "appended", 9), 0);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+
+    xlog_reader *r = xlog_reader_open("test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, 8);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "created");
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, 9);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "appended");
+    xlog_reader_close(r);
+
+    /* Relative path with a directory component. */
+    mkdir("test_dir", 0755);
+    unlink("test_dir/nested.xlog");
+    w = xlog_writer_open("test_dir/nested.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "nested", 7), 0);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+
+    r = xlog_reader_open("test_dir/nested.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(r);
+    sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
+    CU_ASSERT_EQUAL_FATAL(sz, 7);
+    CU_ASSERT_STRING_EQUAL_FATAL(rbuf, "nested");
+    xlog_reader_close(r);
+
+    /* Absolute path. */
+    unlink("/tmp/xlog_abs_test.xlog");
+    w = xlog_writer_open("/tmp/xlog_abs_test.xlog");
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "abs", 4), 0);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+    unlink("/tmp/xlog_abs_test.xlog");
+
+    /* XLOG_NOSYNC skips the directory sync but still creates the log. */
+    unlink("test_nosync.xlog");
+    w = xlog_writer_open_ex("test_nosync.xlog", XLOG_MAX_RECORD_SIZE, XLOG_NOSYNC);
+    CU_ASSERT_PTR_NOT_NULL_FATAL(w);
+    CU_ASSERT_EQUAL(xlog_writer_commit(w, "nosync", 7), 0);
+    CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
+    unlink("test_nosync.xlog");
+
+    /* Failures still report through errno. */
+    errno = 0;
+    CU_ASSERT_PTR_NULL(xlog_writer_open("no_such_dir/test.xlog"));
+    CU_ASSERT_EQUAL(errno, ENOENT);
+    errno = 0;
+    CU_ASSERT_PTR_NULL(xlog_writer_open("test_dir"));
+    CU_ASSERT_EQUAL(errno, EISDIR);
+
+    unlink("test_dir/nested.xlog");
+    rmdir("test_dir");
 }
 
 static void test_xlog_sync_fallback(void) {
@@ -563,6 +637,11 @@ int main(void) {
     }
 
     if(NULL == CU_add_test(suite, "xlog_sync_fallback", test_xlog_sync_fallback)) {
+        CU_cleanup_registry();
+        return CU_get_error();
+    }
+
+    if(NULL == CU_add_test(suite, "xlog_create_paths", test_xlog_create_paths)) {
         CU_cleanup_registry();
         return CU_get_error();
     }

@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/uio.h>
 #include <unistd.h>
 
@@ -47,17 +48,57 @@ static ssize_t xlog_readall(int fd, void *buf, size_t n) {
 /* Durable flush. On macOS fsync only hands data to the drive's write cache,
    so F_FULLFSYNC is needed to force a media flush; volumes that do not
    implement it (SMB, NFS, some virtual devices) report it as unsupported
-   and fall back to fsync. Real failures such as EIO propagate. */
-static int xlog_sync(int fd) {
+   and fall back to fsync. Real failures such as EIO propagate. `meta`
+   requests metadata as well, which a directory entry needs. */
+static int xlog_sync(int fd, int meta) {
 #ifdef __APPLE__
+    (void)meta; /* F_FULLFSYNC covers both */
     if(fcntl(fd, F_FULLFSYNC) == 0) return 0;
     if(errno == ENOTSUP || errno == EOPNOTSUPP || errno == ENOTTY ||
        errno == ENODEV || errno == EINVAL)
         return fsync(fd);
     return -1;
 #else
-    return fdatasync(fd);
+    return meta ? fsync(fd) : fdatasync(fd);
 #endif
+}
+
+/* Flush the parent directory so that a newly created log survives a crash:
+   until the directory entry reaches disk the file may not exist at all
+   after a power loss, however durable its contents are.
+
+   Best effort. A directory that cannot be opened or synced — a write-only
+   spool, a filesystem that rejects directory fsync — is not fatal, since
+   the log itself is created and its records still sync; failing the open
+   there would also report a misleading errno. Only a genuine I/O error,
+   which means the filesystem is failing underneath us, is propagated. */
+static int xlog_sync_parent(const char *path) {
+    const char *slash = strrchr(path, '/');
+    const char *dir = ".";
+    char *buf = NULL;
+
+    if(slash == path) {
+        dir = "/";
+    } else if(slash) {
+        size_t n = (size_t)(slash - path);
+        buf = malloc(n + 1);
+        if(!buf) return -1;
+        memcpy(buf, path, n);
+        buf[n] = '\0';
+        dir = buf;
+    }
+
+    int fd = open(dir, O_RDONLY | O_CLOEXEC);
+    free(buf);
+    if(fd < 0) return 0;
+
+    int rc = 0;
+    if(xlog_sync(fd, 1) < 0 && errno == EIO) rc = -1;
+
+    int err = errno;
+    close(fd);
+    errno = err;
+    return rc;
 }
 
 xlog_writer *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int flags) {
@@ -69,9 +110,24 @@ xlog_writer *xlog_writer_open_ex(const char *path, uint32_t max_record_size, int
     xlog_writer *w = malloc(sizeof(xlog_writer));
     if(!w) return NULL;
 
-    w->fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+    /* O_EXCL reports whether this call created the log, without racing a
+       concurrent writer: only the creator owes the directory a sync. */
+    int created = 1;
+    w->fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_APPEND | O_CLOEXEC, 0644);
+    if(w->fd < 0 && errno == EEXIST) {
+        created = 0;
+        w->fd = open(path, O_WRONLY | O_APPEND | O_CLOEXEC);
+    }
     if(w->fd < 0) {
         free(w);
+        return NULL;
+    }
+
+    if(created && !(flags & XLOG_NOSYNC) && xlog_sync_parent(path) < 0) {
+        int err = errno;
+        close(w->fd);
+        free(w);
+        errno = err;
         return NULL;
     }
 
@@ -104,7 +160,7 @@ int xlog_writer_commit(xlog_writer *w, const void *buf, size_t sz) {
         return XLOG_ERR_IO;
 
     if(!(w->flags & XLOG_NOSYNC)) {
-        if(xlog_sync(w->fd) < 0)
+        if(xlog_sync(w->fd, 0) < 0)
             return XLOG_ERR_SYNC;
     }
 
