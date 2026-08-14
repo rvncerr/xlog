@@ -1,9 +1,35 @@
 #include "xlog.hpp"
-#include <cassert>
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <unistd.h>
+
+// This suite used assert(), which the documented Release build compiles out
+// via -DNDEBUG — every check vanished and the binary passed without testing
+// anything. These checks are ordinary code, so they run under any build type,
+// and a failure reaches the exit code instead of being silently dropped.
+static int failures = 0;
+
+static void check_failed(const char *what, const char *file, int line) {
+    fprintf(stderr, "FAIL %s:%d: %s\n", file, line, what);
+    ++failures;
+}
+
+#define CHECK(cond) ((cond) ? (void)0 : check_failed(#cond, __FILE__, __LINE__))
+
+// For a condition whose failure would make the rest of the test unsafe or
+// meaningless — reading a record that came back the wrong size, say.
+#define CHECK_FATAL(cond)                                     \
+    do {                                                      \
+        if(!(cond)) {                                         \
+            check_failed(#cond, __FILE__, __LINE__);          \
+            return;                                           \
+        }                                                     \
+    } while(0)
+
+// Reached only when something that had to throw did not.
+#define CHECK_FAILED(msg) check_failed(msg, __FILE__, __LINE__)
 
 static void test_basic() {
     unlink("test_cpp.xlog");
@@ -17,15 +43,15 @@ static void test_basic() {
     {
         xlog::reader r("test_cpp.xlog");
         auto rec1 = r.next(4096);
-        assert(rec1.size() == 6);
-        assert(memcmp(rec1.data(), "hello", 6) == 0);
+        CHECK_FATAL(rec1.size() == 6);
+        CHECK(memcmp(rec1.data(), "hello", 6) == 0);
 
         auto rec2 = r.next(4096);
-        assert(rec2.size() == 6);
-        assert(memcmp(rec2.data(), "world", 6) == 0);
+        CHECK_FATAL(rec2.size() == 6);
+        CHECK(memcmp(rec2.data(), "world", 6) == 0);
 
         auto eof = r.next(4096);
-        assert(eof.empty());
+        CHECK(eof.empty());
     }
 
     unlink("test_cpp.xlog");
@@ -45,13 +71,14 @@ static void test_struct() {
     {
         xlog::reader r("test_cpp.xlog");
         auto rec = r.next(4096);
-        assert(rec.size() == sizeof(record));
+        CHECK_FATAL(rec.size() == sizeof(record));
         auto *p = reinterpret_cast<const record *>(rec.data());
-        assert(p->x == 10 && p->y == 20);
+        CHECK(p->x == 10 && p->y == 20);
 
         rec = r.next(4096);
+        CHECK_FATAL(rec.size() == sizeof(record));
         p = reinterpret_cast<const record *>(rec.data());
-        assert(p->x == 30 && p->y == 40);
+        CHECK(p->x == 30 && p->y == 40);
     }
 
     unlink("test_cpp.xlog");
@@ -64,9 +91,9 @@ static void test_errors() {
         xlog::writer w("test_cpp.xlog");
         try {
             w.commit("data", 0);
-            assert(false);
+            CHECK_FAILED("commit of a zero-length record did not throw");
         } catch(const xlog::error &e) {
-            assert(e.code() == XLOG_ERR_SIZE);
+            CHECK(e.code() == XLOG_ERR_SIZE);
         }
     }
 
@@ -83,8 +110,8 @@ static void test_move() {
     xlog::reader r1("test_cpp.xlog");
     xlog::reader r2 = std::move(r1);
     auto rec = r2.next(4096);
-    assert(rec.size() == 6);
-    assert(memcmp(rec.data(), "moved", 6) == 0);
+    CHECK_FATAL(rec.size() == 6);
+    CHECK(memcmp(rec.data(), "moved", 6) == 0);
 
     unlink("test_cpp.xlog");
 }
@@ -96,28 +123,28 @@ static void test_open_error() {
 
     try {
         xlog::writer w(missing);
-        assert(false);
+        CHECK_FAILED("opening a writer under a missing directory did not throw");
     } catch(const xlog::error &e) {
-        assert(e.code() == XLOG_ERR_IO);
-        assert(strstr(e.what(), missing) != nullptr);
-        assert(strstr(e.what(), strerror(ENOENT)) != nullptr);
+        CHECK(e.code() == XLOG_ERR_IO);
+        CHECK(strstr(e.what(), missing) != nullptr);
+        CHECK(strstr(e.what(), strerror(ENOENT)) != nullptr);
     }
 
     try {
         xlog::reader r(missing);
-        assert(false);
+        CHECK_FAILED("opening a reader on a missing log did not throw");
     } catch(const xlog::error &e) {
-        assert(e.code() == XLOG_ERR_IO);
-        assert(strstr(e.what(), missing) != nullptr);
-        assert(strstr(e.what(), strerror(ENOENT)) != nullptr);
+        CHECK(e.code() == XLOG_ERR_IO);
+        CHECK(strstr(e.what(), missing) != nullptr);
+        CHECK(strstr(e.what(), strerror(ENOENT)) != nullptr);
     }
 
     // The _ex opens report their own EINVAL, not a filesystem error.
     try {
         xlog::writer w("test_cpp.xlog", 0);
-        assert(false);
+        CHECK_FAILED("max_record_size of 0 did not throw");
     } catch(const xlog::error &e) {
-        assert(strstr(e.what(), strerror(EINVAL)) != nullptr);
+        CHECK(strstr(e.what(), strerror(EINVAL)) != nullptr);
     }
     unlink("test_cpp.xlog");
 }
@@ -128,6 +155,11 @@ int main() {
     test_errors();
     test_move();
     test_open_error();
+
+    if(failures) {
+        fprintf(stderr, "%d C++ check(s) failed.\n", failures);
+        return EXIT_FAILURE;
+    }
     printf("All C++ tests passed.\n");
-    return 0;
+    return EXIT_SUCCESS;
 }
