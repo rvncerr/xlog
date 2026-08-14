@@ -47,14 +47,14 @@ static void test_crc32c(void) {
 static void test_xlog_basic(void) {
     unlink("test.xlog");
 
-    char *wbuf = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
-                "sed do eiusmod tempor incididunt ut labore et dolore magna "
-                "aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
-                "ullamco laboris nisi ut aliquip ex ea commodo consequat. "
-                "Duis aute irure dolor in reprehenderit in voluptate velit "
-                "esse cillum dolore eu fugiat nulla pariatur. Excepteur sint "
-                "occaecat cupidatat non proident, sunt in culpa qui officia "
-                "deserunt mollit anim id est laborum.";
+    const char *wbuf = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, "
+                      "sed do eiusmod tempor incididunt ut labore et dolore magna "
+                      "aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
+                      "ullamco laboris nisi ut aliquip ex ea commodo consequat. "
+                      "Duis aute irure dolor in reprehenderit in voluptate velit "
+                      "esse cillum dolore eu fugiat nulla pariatur. Excepteur sint "
+                      "occaecat cupidatat non proident, sunt in culpa qui officia "
+                      "deserunt mollit anim id est laborum.";
 
     xlog_writer *w = xlog_writer_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
@@ -77,7 +77,7 @@ static void test_xlog_multi(void) {
     CU_ASSERT_PTR_NOT_NULL_FATAL(w);
     for(int i = 0; i < 1000; i++) {
         char buf[32];
-        sprintf(buf, "Hello, world! %d", i);
+        snprintf(buf, sizeof(buf), "Hello, world! %d", i);
         CU_ASSERT_EQUAL(xlog_writer_commit(w, buf, strlen(buf) + 1), 0);
     }
     CU_ASSERT_EQUAL(xlog_writer_close(w), 0);
@@ -90,7 +90,7 @@ static void test_xlog_multi(void) {
     for(int i = 0; i < 1000; i++) {
         sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
         char buf[32];
-        sprintf(buf, "Hello, world! %d", i);
+        snprintf(buf, sizeof(buf), "Hello, world! %d", i);
         CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(buf) + 1));
         CU_ASSERT_STRING_EQUAL_FATAL(buf, rbuf);
     }
@@ -103,7 +103,7 @@ static void test_xlog_multi(void) {
     for(int i = 0; i < 1000; i++) {
         sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
         char buf[32];
-        sprintf(buf, "Hello, world! %d", i);
+        snprintf(buf, sizeof(buf), "Hello, world! %d", i);
         CU_ASSERT_EQUAL_FATAL(sz, (ssize_t)(strlen(buf) + 1));
         CU_ASSERT_STRING_EQUAL_FATAL(buf, rbuf);
     }
@@ -332,10 +332,10 @@ static void test_xlog_errors(void) {
     /* Reader: corrupt checksum returns XLOG_ERR_CRC */
     FILE *f = fopen("test.xlog", "r+b");
     CU_ASSERT_PTR_NOT_NULL_FATAL(f);
-    fseek(f, 8, SEEK_SET);
+    CU_ASSERT_EQUAL_FATAL(fseek(f, 8, SEEK_SET), 0);
     uint8_t garbage = 0xFF;
-    fwrite(&garbage, 1, 1, f);
-    fclose(f);
+    CU_ASSERT_EQUAL_FATAL(fwrite(&garbage, 1, 1, f), 1);
+    CU_ASSERT_EQUAL_FATAL(fclose(f), 0);
 
     char rbuf[RBUF_SIZE];
     xlog_reader *r = xlog_reader_open("test.xlog");
@@ -347,7 +347,8 @@ static void test_xlog_errors(void) {
     /* Reader: EOF on empty file */
     unlink("test.xlog");
     f = fopen("test.xlog", "wb");
-    fclose(f);
+    CU_ASSERT_PTR_NOT_NULL_FATAL(f);
+    CU_ASSERT_EQUAL_FATAL(fclose(f), 0);
     r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     sz = xlog_reader_next(r, rbuf, sizeof(rbuf));
@@ -362,9 +363,9 @@ static void test_xlog_errors(void) {
     };
     f = fopen("test.xlog", "wb");
     CU_ASSERT_PTR_NOT_NULL_FATAL(f);
-    fwrite(fake_header, sizeof(fake_header), 1, f);
-    fwrite("short", 5, 1, f);
-    fclose(f);
+    CU_ASSERT_EQUAL_FATAL(fwrite(fake_header, sizeof(fake_header), 1, f), 1);
+    CU_ASSERT_EQUAL_FATAL(fwrite("short", 5, 1, f), 1);
+    CU_ASSERT_EQUAL_FATAL(fclose(f), 0);
     r = xlog_reader_open("test.xlog");
     CU_ASSERT_PTR_NOT_NULL_FATAL(r);
     errno = 0;
@@ -395,9 +396,9 @@ static void test_xlog_skip_corrupt(void) {
     int fd = open("test.xlog", O_RDWR);
     CU_ASSERT_FATAL(fd >= 0);
     /* record 1: 8 hdr + 4 data = 12 bytes, record 2 header at offset 12, payload at 20 */
-    lseek(fd, 20, SEEK_SET);
+    CU_ASSERT_EQUAL_FATAL(lseek(fd, 20, SEEK_SET), 20);
     uint8_t garbage = 0xFF;
-    write(fd, &garbage, 1);
+    CU_ASSERT_EQUAL_FATAL(write(fd, &garbage, 1), 1);
     close(fd);
 
     /* Without XLOG_SKIP_CORRUPT: stops at corrupt record */
@@ -441,8 +442,8 @@ static void test_xlog_skip_badsize(void) {
     int fd = open("test.xlog", O_RDWR);
     CU_ASSERT_FATAL(fd >= 0);
     uint8_t bad_size[4] = { 0, 0, 0, 0 };
-    lseek(fd, 12, SEEK_SET);
-    write(fd, bad_size, 4);
+    CU_ASSERT_EQUAL_FATAL(lseek(fd, 12, SEEK_SET), 12);
+    CU_ASSERT_EQUAL_FATAL(write(fd, bad_size, 4), 4);
     close(fd);
 
     /* Without flag: stops at bad size */

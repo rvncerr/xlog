@@ -246,8 +246,8 @@ ssize_t xlog_reader_next(xlog_reader *r, void *buf, size_t cap) {
         if(pos < 0) return XLOG_ERR_IO;
         ssize_t rc = xlog_decode(r, buf, cap, pos);
 
-        if(rc >= 0) { return rc; }
-        if(rc == XLOG_EOF) { return XLOG_EOF; }
+        /* A record size, or XLOG_EOF (0) at the end of the log. */
+        if(rc >= 0) return rc;
 
         if(rc == XLOG_ERR_CRC && !scanning && (r->flags & XLOG_SKIP_CORRUPT))
             continue;
@@ -266,6 +266,13 @@ ssize_t xlog_reader_next(xlog_reader *r, void *buf, size_t cap) {
         if(rc == XLOG_ERR_TRUNCATED && !scanning)
             return rc;
 
+        /* Resynchronize by retrying one byte later, since an unusable size
+           field leaves no way to find the next boundary. Each step costs a
+           seek and an 8-byte header read, and a candidate whose size is
+           merely plausible costs a payload read of up to max_record_size
+           bytes before its CRC rejects it: crossing a d-byte damaged span is
+           O(d) syscalls and up to O(d * max_record_size) bytes read. That is
+           why this is opt-in — it is a salvage path, not a normal one. */
         if(r->flags & XLOG_SKIP_BADSIZE) {
             scanning = 1;
             if(lseek(r->fd, pos + 1, SEEK_SET) < 0) return XLOG_ERR_IO;

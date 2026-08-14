@@ -7,16 +7,18 @@
 
 #define DUMP_BUF_SIZE (1024 * 1024)
 
-static void hexdump(void *buf, size_t sz) {
+static void hexdump(const void *buf, size_t sz) {
+    const uint8_t *p = buf;
+
     for (size_t i = 0; i < sz / 16; i++) {
         printf("%08zx  ", i * 16);
         for (size_t j = 0; j < 16; j++) {
             if(j == 8) printf(" ");
-            printf("%02x ", ((uint8_t *)buf)[i * 16 + j]);
+            printf("%02x ", p[i * 16 + j]);
         }
         printf("  |");
         for (size_t j = 0; j < 16; j++) {
-            printf("%c", isprint(((uint8_t *)buf)[i * 16 + j]) ? ((uint8_t *)buf)[i * 16 + j] : '.');
+            printf("%c", isprint(p[i * 16 + j]) ? p[i * 16 + j] : '.');
         }
         printf("|\n");
     }
@@ -24,7 +26,7 @@ static void hexdump(void *buf, size_t sz) {
         printf("%08zx  ", sz / 16 * 16);
         for (size_t j = 0; j < sz % 16; j++) {
             if(j == 8) printf(" ");
-            printf("%02x ", ((uint8_t *)buf)[sz / 16 * 16 + j]);
+            printf("%02x ", p[sz / 16 * 16 + j]);
         }
         for (size_t j = 0; j < 16 - sz % 16; j++) {
             if(sz % 16 + j == 8) printf(" ");
@@ -32,7 +34,7 @@ static void hexdump(void *buf, size_t sz) {
         }
         printf("  |");
         for (size_t j = 0; j < sz % 16; j++) {
-            printf("%c", isprint(((uint8_t *)buf)[sz / 16 * 16 + j]) ? ((uint8_t *)buf)[sz / 16 * 16 + j] : '.');
+            printf("%c", isprint(p[sz / 16 * 16 + j]) ? p[sz / 16 * 16 + j] : '.');
         }
         printf("|\n");
     }
