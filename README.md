@@ -40,7 +40,7 @@ xlog_reader_close(r);
 {
     xlog::writer w("my.xlog");
     w.commit(data, len);
-    w.commit(my_struct);  // any POD type
+    w.commit(my_struct);  // any trivially copyable non-pointer type
 }
 
 /* Read — returns std::vector<uint8_t> (empty at EOF), throws on error */

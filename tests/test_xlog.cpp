@@ -1,5 +1,6 @@
 #include "xlog.hpp"
 #include <cassert>
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <unistd.h>
@@ -88,11 +89,45 @@ static void test_move() {
     unlink("test_cpp.xlog");
 }
 
+// Open failures must carry the errno text; XLOG_ERR_IO alone says nothing
+// about why the open failed.
+static void test_open_error() {
+    const char *missing = "no_such_dir_xlog/test_cpp.xlog";
+
+    try {
+        xlog::writer w(missing);
+        assert(false);
+    } catch(const xlog::error &e) {
+        assert(e.code() == XLOG_ERR_IO);
+        assert(strstr(e.what(), missing) != nullptr);
+        assert(strstr(e.what(), strerror(ENOENT)) != nullptr);
+    }
+
+    try {
+        xlog::reader r(missing);
+        assert(false);
+    } catch(const xlog::error &e) {
+        assert(e.code() == XLOG_ERR_IO);
+        assert(strstr(e.what(), missing) != nullptr);
+        assert(strstr(e.what(), strerror(ENOENT)) != nullptr);
+    }
+
+    // The _ex opens report their own EINVAL, not a filesystem error.
+    try {
+        xlog::writer w("test_cpp.xlog", 0);
+        assert(false);
+    } catch(const xlog::error &e) {
+        assert(strstr(e.what(), strerror(EINVAL)) != nullptr);
+    }
+    unlink("test_cpp.xlog");
+}
+
 int main() {
     test_basic();
     test_struct();
     test_errors();
     test_move();
+    test_open_error();
     printf("All C++ tests passed.\n");
     return 0;
 }
